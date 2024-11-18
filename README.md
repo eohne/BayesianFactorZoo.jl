@@ -6,14 +6,8 @@ BayesianFactorZoo.jl is a Julia port of the R package 'BayesianFactorZoo' ([CRAN
 
 If you use this package, please cite the original paper.
 
-## Overview
-
-This package provides a novel Bayesian framework for analyzing linear asset pricing models that is simple, robust, and applicable to high-dimensional problems. The key features include:
-
-- Bayesian estimation methods for single-factor models
-- Robust inference for risk prices and risk premia
-- Model selection tools for high-dimensional factor models
-- Support for both tradable and non-tradable factors
+For detailed documentation of the original R implementation, see the [R package documentation (PDF)](https://cran.r-project.org/web/packages/BayesianFactorZoo/BayesianFactorZoo.pdf).
+Note that function signatures and exposed functions are equivalent to the R version.
 
 ## Installation
 For now this is not in the general registry (I will register it at some point). In the meantime you can install it directly from my repository.
@@ -26,7 +20,7 @@ Pkg.add("url-to-repo")
 
 ### `BayesianFM(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int)`
 
-Performs Bayesian Fama-MacBeth regression. Similar to `BayesianSDF` but estimates factors' risk premia rather than risk prices. Uses factor loadings (β_f) instead of covariance exposures (C_f) in the Fama-MacBeth regression.
+Performs Bayesian Fama-MacBeth regression.
 
 Parameters:
 - `f`: t × k matrix of factors (t periods, k factors)
@@ -42,12 +36,6 @@ Returns:
 ### `BayesianSDF(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int; kwargs...)`
 
 Performs Bayesian estimation of linear stochastic discount factor (SDF). Supports both flat and normal priors for risk prices.
-
-The model assumes an SDF of the form:
-
-```math
-M_t = 1 - (f_t - E[f_t])^T \lambda_f
-```
 
 Parameters:
 - `f`: t × k matrix of factors
@@ -67,15 +55,7 @@ Returns:
 
 #### `continuous_ss_sdf(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int; kwargs...)`
 
-Performs SDF model selection using continuous spike-and-slab prior. This implements the model selection procedure from Propositions 3 and 4 in the paper.
-
-The spike-and-slab prior for risk prices λ is:
-
-```math
-\lambda_j|\gamma_j,\sigma^2 \sim N(0, r(\gamma_j)\psi_j\sigma^2)
-```
-
-where γ_j is a binary inclusion indicator and r(γ_j) is either 1 (included) or r ≪ 1 (excluded).
+Performs SDF model selection using continuous spike-and-slab prior.
 
 Parameters:
 - `f`: t × k matrix of factors
@@ -94,8 +74,6 @@ Returns:
 - `bma_sdf`: Bayesian Model Averaged SDF
 
 #### `dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int, lambda0::Vector{Float64})`
-
-Tests the null hypothesis H₀: λ = λ₀ when γ = 0 using a Dirac spike-and-slab prior. When λ₀ = 0, compares factor models using the algorithm in Proposition 1 of the paper.
 
 Parameters:
 - `f`: t × k matrix of factors
