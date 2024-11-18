@@ -1,0 +1,76 @@
+GNU GENERAL PUBLIC LICENSE
+Version 3, 29 June 2007
+
+Copyright (C) 2024  Elias Ohneberg
+Everyone is permitted to copy and distribute verbatim copies of this license document, but changing it is not allowed.
+
+  BayesianFactorZoo.jl is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by the
+  Free Software Foundation, either version 3 of the License, or (at your option)
+  any later version.
+
+  BayesianFactorZoo.jl is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with BayesianFactorZoo.jl.  If not, see <https://www.gnu.org/licenses/>.
+
+---
+
+  TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
+
+  0. Definitions.
+
+  "This License" refers to version 3 of the GNU General Public License.
+
+  "Copyright" means legal rights that apply to the work under copyright law.
+  
+  "You" means the licensee of this program. 
+
+  "The Program" refers to any work that is distributed under the terms of this License.
+
+  "Modified Version" means a version of the program that has been altered, changed, or adapted from the original.
+
+  "Source Code" refers to the preferred form of the program for making modifications.
+
+  "Object Code" refers to the compiled, executable form of the program.
+
+  1. Source Code.
+
+  You must provide the source code for the Program along with any distribution, or make it available for download.
+
+  2. Modified Versions.
+
+  You may modify the Program and distribute it under the terms of this License, provided that you preserve the notices that refer to this License and any other notices.
+
+  3. Copyleft.
+
+  If you distribute a copy or modified version of the Program, you must pass on the same rights to recipients by including this License, and you must distribute the source code or make it available.
+
+  4. Conveying Non-Source Forms.
+
+  If you distribute the Program in a form that does not include the source code (such as a compiled or executable version), you must offer a copy of the source code along with the Program.
+
+  5. No Warranty.
+
+  The Program is provided "as is", without any warranty of any kind, either express or implied, including but not limited to the warranties of merchantability or fitness for a particular purpose.
+
+  6. Patent Grant.
+
+  If you distribute the Program, you are granting a patent license to the recipients of the Program, covering the usage of your contributions.
+
+  7. Tivoization.
+
+  If you distribute the Program, you are prohibited from using technical protections that prevent the recipient from modifying the Program.
+
+  8. Termination.
+
+  If you violate the terms of the GPL License, you lose the rights granted under this License unless the violation is cured within 30 days of notification.
+
+  9. Accepting the License.
+
+  By using, copying, modifying, or distributing the Program, you agree to abide by the terms of this License.
+
+  END OF TERMS AND CONDITIONS
