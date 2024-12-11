@@ -12,10 +12,8 @@ BayesianFactorZoo.jl provides a comprehensive framework for analyzing linear ass
 - Simple and robust
 - Applicable to high-dimensional problems
 - Capable of handling both tradable and non-tradable factors
-- Valid under model misspecification
-- Robust to weak factors
 
-For a stand-alone model, the package delivers reliable price of risk estimates and detects weakly identified factors. For competing factors and models, it provides automatic model selection or Bayesian model averaging when no clear winner exists.
+For a stand-alone model, the package delivers reliable price of risk estimates for tradable and non-tradable factors.
 
 ## Installation
 
