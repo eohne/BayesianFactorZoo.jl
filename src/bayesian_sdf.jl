@@ -1,13 +1,63 @@
 """
-    BayesianSDF(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int=10000;
-                intercept::Bool=true, type::String="OLS", prior::String="Flat",
-                psi0::Float64=5.0, d::Float64=0.5)
+    BayesianSDF(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int=10000; 
+               intercept::Bool=true, type::String="OLS", prior::String="Flat",
+               psi0::Float64=5.0, d::Float64=0.5)
 
-Bayesian estimation of Linear SDF (B-SDF)
+Bayesian estimation of Linear SDF (B-SDF).
+
+# Arguments
+- `f`: Matrix of factors with dimension ``t \\times k``
+- `R`: Matrix of test assets with dimension ``t \\times N``
+- `sim_length`: Length of MCMCs
+- `intercept`: Include intercept if true, default=true
+- `type`: "OLS" or "GLS", default="OLS"
+- `prior`: "Flat" or "Normal", default="Flat"
+- `psi0`: Hyperparameter for normal prior, default=5
+- `d`: Hyperparameter for normal prior, default=0.5
+
+# Returns
+Returns a BayesianSDFOutput struct containing:
+- `lambda_path::Matrix{Float64}`: Matrix of size sim_length × (k+1) if intercept=true, or sim_length × k if false. Contains posterior draws of risk prices.
+- `R2_path::Vector{Float64}`: Vector of length sim_length containing ``R^2`` draws.
+- Metadata fields accessible via dot notation:
+ - `n_factors::Int`: Number of factors (k)
+ - `n_assets::Int`: Number of test assets (N)
+ - `n_observations::Int`: Number of time periods (t)
+ - `sim_length::Int`: Number of MCMC iterations performed
+ - `prior::String`: Prior specification used ("Flat" or "Normal")
+ - `estimation_type::String`: Estimation type used ("OLS" or "GLS")
+
+# Notes
+- Input matrices f and R must have the same number of rows (time periods)
+- Number of test assets (N) must be larger than number of factors (k) when including intercept
+- Number of test assets (N) must be >= number of factors (k) when excluding intercept
+- The function performs no pre-standardization of inputs
+- Risk prices are estimated in the units of the input data (typically monthly returns)
+
+# References
+Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487–557.
+
+# Examples
+```julia
+# Basic usage with default settings
+results = BayesianSDF(f, R)
+
+# Use GLS with normal prior
+results_gls = BayesianSDF(f, R, 10_000; 
+                        type="GLS", 
+                        prior="Normal",
+                        psi0=5.0,
+                        d=0.5)
+
+# Access results
+risk_prices = mean(results.lambda_path, dims=1)
+r2_values = mean(results.R2_path)
+```
 """
 function BayesianSDF(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int=10000;
     intercept::Bool=true, type::String="OLS", prior::String="Flat",
     psi0::Float64=5.0, d::Float64=0.5)
+
 
     t, k = size(f)   # factors: t × k
     N = size(R, 2)   # returns: t × N
@@ -46,16 +96,17 @@ function BayesianSDF(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int=100
 
     # Setup inverse Wishart with exact R scale
     iw_dist = InverseWishart(t - 1, t * Sigma_ols)
-
+    rngs = [MersenneTwister(i) for i in 1:sim_length]
     # MCMC loop
     Threads.@threads for i in 1:sim_length
+        mtwist = rngs[i]
         # First stage: time series regression
-        Sigma = rand(iw_dist)
+        Sigma = rand(mtwist,iw_dist)
         Sigma_R = Sigma[k+1:end, k+1:end]
         
         # Draw means (matching R's approach)
         Var_mu_half = cholesky(Sigma/t).U
-        mu = mu_ols + transpose(Var_mu_half) * randn(p)
+        mu = mu_ols + transpose(Var_mu_half) * randn(mtwist,p)
         
         # Calculate quantities for second stage
         sd_Y = sqrt.(diag(Sigma))

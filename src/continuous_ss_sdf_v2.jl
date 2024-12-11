@@ -1,161 +1,167 @@
 """
-    continuous_ss_sdf_v2(f1::Matrix{Float64}, f2::Matrix{Float64}, R::Matrix{Float64}, 
-                        sim_length::Int; psi0::Float64=1.0, r::Float64=0.001, 
-                        aw::Float64=1.0, bw::Float64=1.0, type::String="OLS", 
-                        intercept::Bool=true)
+    continuous_ss_sdf_v2(f1::Matrix{Float64}, f2::Matrix{Float64}, R::Matrix{Float64},
+                       sim_length::Int; psi0::Float64=1.0, r::Float64=0.001,
+                       aw::Float64=1.0, bw::Float64=1.0,
+                       type::String="OLS", intercept::Bool=true)
 
 SDF model selection with continuous spike-and-slab prior, treating tradable factors as test assets.
-"""
-function continuous_ss_sdf_v2(f1::Matrix{Float64}, f2::Matrix{Float64}, R::Matrix{Float64},
-    sim_length::Int; psi0::Float64=1.0, r::Float64=0.001,
-    aw::Float64=1.0, bw::Float64=1.0, type::String="OLS",
-    intercept::Bool=true)
 
-    f = hcat(f1, f2)
+# Arguments
+- `f1`: Matrix of nontradable factors with dimension ``t \\times k_1``
+- `f2`: Matrix of tradable factors with dimension ``t \\times k_2``
+- `R`: Matrix of test assets with dimension ``t \\times N`` (should NOT contain f2)
+- `sim_length`: Length of MCMCs
+- `psi0,r,aw,bw,type,intercept`: Same as continuous_ss_sdf
+
+# Details
+Same prior structure and posterior distributions as continuous_ss_sdf, but:
+1. Treats tradable factors f2 as test assets
+2. Total dimension of test assets becomes ``N + k_2``
+3. Factor loadings computed on combined test asset set
+
+
+# Returns
+Returns a ContinuousSSSDFOutput struct containing:
+- `gamma_path::Matrix{Float64}`: Matrix of size sim_length × k containing posterior draws of factor inclusion indicators, where ``k = k_1 + k_2`` (total number of factors).
+- `lambda_path::Matrix{Float64}`: Matrix of size sim_length × (k+1) if intercept=true, or sim_length × k if false. Contains posterior draws of risk prices.
+- `sdf_path::Matrix{Float64}`: Matrix of size sim_length × t containing posterior draws of the SDF.
+- `bma_sdf::Vector{Float64}`: Vector of length t containing the Bayesian Model Averaged SDF.
+- Metadata fields accessible via dot notation:
+ - `n_factors::Int`: Number of factors (``k_1 + k_2``)
+ - `n_assets::Int`: Number of test assets (N)
+ - `n_observations::Int`: Number of time periods (t)
+ - `sim_length::Int`: Number of MCMC iterations performed
+
+# Notes
+- Input matrices f1, f2, and R must have the same number of rows (time periods)
+- Test assets R should not include the tradable factors f2
+- The factor selection combines both sparsity and density aspects through Bayesian Model Averaging
+- Prior parameters aw, bw control beliefs about model sparsity
+- Parameter psi0 maps into prior beliefs about achievable Sharpe ratios
+- The spike component r should be close to zero to effectively shrink irrelevant factors
+
+# References
+Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487–557.
+
+# Examples
+```julia
+# Basic usage with default settings
+results = continuous_ss_sdf_v2(f1, f2, R, 10_000)
+
+# Use GLS with custom priors
+results_gls = continuous_ss_sdf_v2(f1, f2, R, 10_000;
+                                type="GLS",
+                                psi0=2.0,
+                                aw=2.0, 
+                                bw=2.0)
+
+# Access results
+inclusion_probs = mean(results.gamma_path, dims=1)  # Factor inclusion probabilities
+risk_prices = mean(results.lambda_path, dims=1)     # Risk price estimates
+avg_sdf = results.bma_sdf                          # Model averaged SDF
+```
+"""
+function continuous_ss_sdf_v2(f1::Matrix{Float64}, f2::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int;
+    psi0::Float64=1.0, r::Float64=0.001,
+    aw::Float64=1.0, bw::Float64=1.0,
+    type::String="OLS", intercept::Bool=true)
+    
+    # Initialize random number generators
+    # mtwist = MersenneTwister()
+    mtwist = MersenneTwister()
+    # rngs = [MersenneTwister(i) for i in 1:sim_length]
+    rngs = [MersenneTwister() for i in 1:1]
+    
+    # Get dimensions
+    t = size(f1, 1)
     k1 = size(f1, 2)
     k2 = size(f2, 2)
     k = k1 + k2
-    N = size(R, 2) + k2
-    t = size(R, 1)
+    N = size(R, 2) + k2  # Include tradable factors as test assets
     p = k1 + N
-
-    Y = hcat(f, R)
+    
+    # Calculate degrees of freedom
+    dof2 = intercept ? (N + k + 1) / 2 : (N + k) / 2
+    
+    # Combine factors and create full data matrix
+    f = hcat(f1, f2)
+    Y = hcat(f, R)       # Now Y will have f1, f2, R
+    
+    # Compute initial statistics
     Sigma_ols = cov(Y)
     Corr_ols = cor(Y)
-    sd_ols = std(Y, dims=1)[:]
-    mu_ols = mean(Y, dims=1)'
-
-    check_input2(f, hcat(R, f2))
-
-    lambda_path = zeros(sim_length, intercept ? k + 1 : k)
-    gamma_path = zeros(sim_length, k)
-    sdf_path = zeros(sim_length, t)
-
+    sd_ols = vec(std(Y, dims=1))
+    mu_ols = vec(mean(Y, dims=1))
+    
+    # Create initial beta matrix based on correlations
     if intercept
         beta_ols = hcat(ones(N), Corr_ols[k1+1:p, 1:k])
     else
         beta_ols = Corr_ols[k1+1:p, 1:k]
     end
-
+    
+    # Initialize a_ols for first sigma2 calculation
     a_ols = mu_ols[k1+1:p] ./ sd_ols[k1+1:p]
-    Lambda_ols = inv(beta_ols' * beta_ols) * (beta_ols' * a_ols)
-    omega = fill(0.5, k)
-    gamma = rand(Bernoulli(0.5), k)
-    sigma2 = (1 / N) * ((a_ols - beta_ols * Lambda_ols)'*(a_ols-beta_ols*Lambda_ols))[1]
-    r_gamma = ifelse.(gamma .== 1, 1.0, r)
-
+    
+    # Calculate initial Lambda and sigma2 using Cholesky
+    L_init = cholesky(Hermitian(transpose(beta_ols)*beta_ols)).L
+    Lambda_ols = L_init' \ (L_init \ (transpose(beta_ols) * a_ols))
+    
+    # Calculate psi for prior distribution
     rho = cor(Y)[k1+1:p, 1:k]
     if intercept
-        rho_demean = rho .- mean(rho, dims=1)
+        rho_mean = vec(mean(rho, dims=1))
+        rho_demean = rho .- transpose(rho_mean)
     else
         rho_demean = rho
     end
-
+    
+    # Set psi based on correlation structure
     if k == 1
-        psi = psi0 * (rho_demean'*rho_demean)[1]
+        psi = psi0 * (transpose(rho_demean) * rho_demean)[1]
     else
-        psi = psi0 * diag(rho_demean' * rho_demean)
+        psi = psi0 * diag(transpose(rho_demean) * rho_demean)
     end
-
-    Threads.@threads for i in 1:sim_length
-        # First stage: time series regression
-        Sigma = rand(InverseWishart(t - 1, t * Sigma_ols))
-        Sigma = Symmetric(Sigma)
-
-        Var_mu = Symmetric(Sigma / t)
-        mu = mu_ols + cholesky(Var_mu).U' * randn(p)
-
-        sd_Y = sqrt.(diag(Sigma))
-        corr_Y = Symmetric(Sigma ./ (sd_Y * sd_Y'))
-        C_f = corr_Y[k1+1:p, 1:k]
-        a = mu[k1+1:p] ./ sd_Y[k1+1:p]
-
-        # Second stage: cross-sectional regression
-        if intercept
-            beta = hcat(ones(N), C_f)
-        else
-            beta = C_f
-        end
-        corrR = corr_Y[k1+1:p, k1+1:p]
-
-        if intercept
-            D = Diagonal(vcat([1 / 100000], 1 ./ (r_gamma .* psi)))
-        else
-            D = k == 1 ? fill(1 / (r_gamma[1] * psi), 1, 1) : Diagonal(1 ./ (r_gamma .* psi))
-        end
-
-        if type == "OLS"
-            beta_D_inv = inv(beta' * beta + D)
-            cov_Lambda = sigma2 * beta_D_inv
-            Lambda_hat = beta_D_inv * (beta' * a)
-        else # GLS
-            beta_D_inv = inv(beta' * inv(corrR) * beta + D)
-            cov_Lambda = sigma2 * beta_D_inv
-            Lambda_hat = beta_D_inv * (beta' * inv(corrR) * a)
-        end
-
-        if intercept
-            Lambda = Lambda_hat + cholesky(Symmetric(cov_Lambda)).U' * randn(k + 1)
-        else
-            Lambda = Lambda_hat + cholesky(Symmetric(cov_Lambda)).U' * randn(k)
-        end
-
-        if intercept
-            log_odds = log.(omega ./ (1 .- omega)) .+ 0.5 * log(r) .+
-                       0.5 * Lambda[2:end] .^ 2 .* (1 / r .- 1) ./ (sigma2 .* psi)
-        else
-            log_odds = log.(omega ./ (1 .- omega)) .+ 0.5 * log(r) .+
-                       0.5 * Lambda .^ 2 .* (1 / r .- 1) ./ (sigma2 .* psi)
-        end
-
-        odds = exp.(clamp.(log_odds, -100, log(1000)))
-        prob = odds ./ (1 .+ odds)
-        gamma = rand.(Bernoulli.(prob))
-        r_gamma = ifelse.(gamma .== 1, 1.0, r)
-        gamma_path[i, :] = gamma
-
-        omega = rand.(Beta.(aw .+ gamma, bw .+ 1 .- gamma))
-
-        if type == "OLS"
-            if intercept
-                sigma2 = rand(InverseGamma((N + k + 1) / 2,
-                    ((a - beta * Lambda)'*(a-beta*Lambda)+Lambda'*D*Lambda)[1] / 2))
-            else
-                sigma2 = rand(InverseGamma((N + k) / 2,
-                    ((a - beta * Lambda)'*(a-beta*Lambda)+Lambda'*D*Lambda)[1] / 2))
-            end
-        else # GLS
-            if intercept
-                sigma2 = rand(InverseGamma((N + k + 1) / 2,
-                    ((a - beta * Lambda)'*inv(corrR)*(a-beta*Lambda)+Lambda'*D*Lambda)[1] / 2))
-            else
-                sigma2 = rand(InverseGamma((N + k) / 2,
-                    ((a - beta * Lambda)'*inv(corrR)*(a-beta*Lambda)+Lambda'*D*Lambda)[1] / 2))
-            end
-        end
-
-        lambda_path[i, :] = Lambda
-        if intercept
-            Lambda_f = Lambda[2:end] ./ std(f, dims=1)[:]
-        else
-            Lambda_f = Lambda ./ std(f, dims=1)[:]
-        end
-
-        sdf = 1 .- (f .- mean(f, dims=1)) * Lambda_f
-        sdf = 1 .+ sdf .- mean(sdf)
-        sdf_path[i, :] = vec(sdf)
+    
+    # Setup inverse Wishart distribution
+    iw_dist = InverseWishart(t - 1, t * Sigma_ols)
+    
+    # Initialize Output
+    output = MCMCOutputs(
+        zeros(sim_length, k),
+        zeros(sim_length, intercept ? k + 1 : k),
+        zeros(sim_length, t)
+    )
+    
+    # Initialize Constants with dof2 as the last parameter
+    con = MCMCConstants(f, psi, r, aw, bw, type, intercept, rngs, t, N, k, p, Y, iw_dist, mu_ols, dof2)
+    
+    # Initialize State Variables
+    last_state = MCMCStates(
+        ifelse.(rand(mtwist, Bernoulli(0.5), k) .== 1, 1.0, r),
+        (transpose(a_ols - beta_ols * Lambda_ols) * (a_ols - beta_ols * Lambda_ols))[1] / N,
+        fill(0.5, k)
+    )
+    
+    # Initialize temporary storage
+    temp = MCMCTemps(con.intercept, con.p, N, con.k,t)
+    
+    # MCMC loop
+    for i in 1:sim_length
+        mcmc_step!(con, last_state, output, i, temp, k1)
     end
-
-    bma_sdf = vec(mean(sdf_path, dims=1))
-
+    
+    # Calculate BMA-SDF
+    bma_sdf = vec(mean(output.sdf_path, dims=1))
+    
     return ContinuousSSSDFOutput(
-    gamma_path,
-    lambda_path,
-    sdf_path,
-    bma_sdf;
-    n_factors=k,          # k is total number of factors (k1 + k2)
-    n_assets=N,           # N is defined in the function
-    n_observations=t,     # t is defined in the function
-    sim_length=sim_length
+        output.gamma_path,
+        output.lambda_path,
+        output.sdf_path,
+        bma_sdf;
+        n_factors=k,
+        n_assets=N,
+        n_observations=t,
+        sim_length=sim_length
     )
 end

@@ -1,5 +1,8 @@
 # BayesianFactorZoo.jl
 
+[![][docs-latest-img]][docs-latest-url] 
+
+
 BayesianFactorZoo.jl is a Julia port of the R package 'BayesianFactorZoo' ([CRAN link](https://cran.r-project.org/web/packages/BayesianFactorZoo/index.html)) implementing the econometric methods from the paper:
 
 > Bryzgalova, S., Huang, J., & Julliard, C. (2023). Bayesian solutions for the factor zoo: We just ran two quadrillion models. Journal of Finance, 78(1), 487–557. [DOI: 10.1111/jofi.13197](https://doi.org/10.1111/jofi.13197)
@@ -13,12 +16,15 @@ Note that function signatures and exposed functions are equivalent to the R vers
 For now this is not in the general registry (I will register it at some point). In the meantime you can install it directly from my repository.
 ```julia
 using Pkg
-Pkg.add("url-to-repo")
+Pkg.add("http://github.com/eohne/BayesianFactorZoo.jl")
 ```
 
 ## Main Functions
 
-### `BayesianFM(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int)`
+### BayesianFM
+```julia
+BayesianFM(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int)
+```
 
 Performs Bayesian Fama-MacBeth regression.
 
@@ -33,7 +39,10 @@ Returns:
 - `R2_ols_path`: MCMC draws of OLS R²
 - `R2_gls_path`: MCMC draws of GLS R²
 
-### `BayesianSDF(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int; kwargs...)`
+### BayesianSDF
+```julia
+BayesianSDF(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int; kwargs...)
+```
 
 Performs Bayesian estimation of linear stochastic discount factor (SDF). Supports both flat and normal priors for risk prices.
 
@@ -53,7 +62,10 @@ Returns:
 
 ### Model Selection and Testing
 
-#### `continuous_ss_sdf(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int; kwargs...)`
+#### continuous_ss_sdf 
+```julia
+continuous_ss_sdf(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int; kwargs...)
+```
 
 Performs SDF model selection using continuous spike-and-slab prior.
 
@@ -73,7 +85,10 @@ Returns:
 - `sdf_path`: MCMC draws of SDF values
 - `bma_sdf`: Bayesian Model Averaged SDF
 
-#### `dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int, lambda0::Vector{Float64})`
+#### 
+```julia
+dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int, lambda0::Vector{Float64})
+```
 
 Parameters:
 - `f`: t × k matrix of factors
@@ -130,3 +145,21 @@ This package is licensed under GPL-3, as required due to being a port of the GPL
 
 - [Original Paper](https://doi.org/10.1111/jofi.13197)
 - [R Package on CRAN](https://cran.r-project.org/web/packages/BayesianFactorZoo/index.html)
+
+
+## Speed
+
+| Method | Julia Time (s) | R Time (s) | Speed Improvement |
+|--------|---------------|------------|-------------------|
+| Two Pass | 0.000290 | 0.003569 | 12.3x |
+| SDF GMM | 0.002003 | 0.017919 | 8.9x |
+| Bayesian FM | 2.922377 | 27.626776 | 9.5x |
+| Bayesian SDF | 3.418054 | 20.833824 | 6.1x |
+| Continuous SS SDF | 9.049122 | 30.355302 | 3.4x |
+| Continuous SS SDF v2 | 8.217680 | 31.336624 | 3.8x |
+| Dirac SS SDF P-value | 1.954609 | 29.872320 | 15.3x |
+
+
+
+[docs-latest-img]: https://img.shields.io/badge/docs-latest-blue.svg
+[docs-latest-url]: https://eohne.github.io/BayesianFactorZoo.jl/dev/

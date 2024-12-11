@@ -27,7 +27,8 @@ export BayesianFM, # Equiv Output
     summary_statistics,
     summary_table,
     JTestOutput,
-    JTest
+    JTest,
+    construct_weight_matrix
 
 # Include Structs:
 include("structs.jl")

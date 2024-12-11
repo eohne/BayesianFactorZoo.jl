@@ -1,7 +1,70 @@
 """
     TwoPassRegression(f::Matrix{Float64}, R::Matrix{Float64})
 
-Perform Fama-MacBeth two-pass regression.
+Classical Fama-MacBeth two-pass regression.
+
+# Arguments
+- f: Matrix of factors with dimension ``t \\times k``
+- R: Matrix of test assets with dimension ``t \\times N``
+
+# Returns
+Returns a TwoPassRegressionOutput struct containing:
+- lambda::Vector{Float64}: Vector of length k+1 containing OLS risk premia estimates (includes intercept).
+- lambda_gls::Vector{Float64}: Vector of length k+1 containing GLS risk premia estimates.
+- t_stat::Vector{Float64}: Vector of length k+1 containing OLS t-statistics.
+- t_stat_gls::Vector{Float64}: Vector of length k+1 containing GLS t-statistics.
+- R2_adj::Float64: OLS adjusted R².
+- R2_adj_GLS::Float64: GLS adjusted R².
+- alpha::Vector{Float64}: Vector of length N containing OLS pricing errors.
+- t_alpha::Vector{Float64}: Vector of length N containing t-statistics for OLS pricing errors.
+- beta::Matrix{Float64}: Matrix of size N × k containing factor loadings.
+- cov_epsilon::Matrix{Float64}: Matrix of size N × N containing residual covariance.
+- cov_lambda::Matrix{Float64}: Matrix of size (k+1) × (k+1) containing OLS covariance matrix of risk premia.
+- cov_lambda_gls::Matrix{Float64}: Matrix of size (k+1) × (k+1) containing GLS covariance matrix of risk premia.
+- R2_GLS::Float64: Unadjusted GLS R².
+- cov_beta::Matrix{Float64}: Matrix of size (N(k+1)) × (N(k+1)) containing covariance matrix of beta estimates.
+- Metadata fields accessible via dot notation:
+ - n_factors::Int: Number of factors (k)
+ - n_assets::Int: Number of test assets (N)
+ - n_observations::Int: Number of time periods (t)
+
+# Notes
+- Input matrices f and R must have the same number of rows (time periods)
+- The method is vulnerable to bias from weak and useless factors
+- Standard errors account for the EIV problem but assume serial independence
+- Both OLS and GLS estimates are computed with appropriate standard errors
+- R² values are adjusted for degrees of freedom
+- Includes corrections for using factors as test assets when applicable
+
+# References
+Fama, Eugene F., and James D. MacBeth, 1973, Risk, return, and equilibrium: Empirical tests, Journal of Political Economy 81, 607-636.
+
+Shanken, Jay, 1992, On the estimation of beta-pricing models, Review of Financial Studies 5, 1-33.
+
+# Examples
+```julia
+# Perform two-pass regression
+results = TwoPassRegression(f, R)
+
+# Access OLS results
+risk_premia = results.lambda[2:end]  # Factor risk premia (excluding intercept)
+t_stats = results.t_stat[2:end]      # t-statistics
+r2_ols = results.R2_adj              # Adjusted R²
+pricing_errors = results.alpha        # Pricing errors
+
+# Access GLS results
+risk_premia_gls = results.lambda_gls[2:end]  
+t_stats_gls = results.t_stat_gls[2:end]
+r2_gls = results.R2_adj_GLS
+
+# First-pass results
+betas = results.beta                  # Factor loadings
+std_errors_beta = sqrt.(diag(results.cov_beta))  # Standard errors for betas
+```
+
+# See Also
+- `BayesianFM`: Bayesian version that is robust to weak factors
+- `SDF_gmm`: GMM-based alternative estimation approach
 """
 function TwoPassRegression(f::Matrix{Float64}, R::Matrix{Float64})
     t = size(R, 1)

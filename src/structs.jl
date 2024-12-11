@@ -391,9 +391,10 @@ function Base.show(io::IO, ::MIME"text/plain", model::BayesianFMOutput)
     println(io, "  Time periods: $(model.n_observations)")
     println(io, "  MCMC iterations: $(model.sim_length)")
     println(io, "\nRisk Premia Estimates (OLS):")
-    for i in 1:model.n_factors+1
+    for i in 1:size(stats[:lambda_ols_mean],1)
+        num = ifelse(size(stats[:lambda_ols_mean],1)==model.n_factors,i,i-1)
         @printf(io, "  λ_%d: %.4f (±%.4f)\n", 
-                i-1, stats[:lambda_ols_mean][i], stats[:lambda_ols_std][i])
+                num, stats[:lambda_ols_mean][i], stats[:lambda_ols_std][i])
     end
     println(io, "\nModel Fit:")
     @printf(io, "  Mean R² (OLS): %.4f\n", stats[:R2_ols_mean])
@@ -412,9 +413,10 @@ function Base.show(io::IO, ::MIME"text/plain", model::BayesianSDFOutput)
     println(io, "  Prior type: $(model.prior)")
     println(io, "  Estimation type: $(model.estimation_type)")
     println(io, "\nRisk Price Estimates:")
-    for i in 1:model.n_factors+1
+    for i in 1: size(stats[:lambda_mean],1) #model.n_factors+1
+        num = ifelse(size(stats[:lambda_mean],1)==model.n_factors,i,i-1)
         @printf(io, "  λ_%d: %.4f (±%.4f)\n", 
-                i-1, stats[:lambda_mean][i], stats[:lambda_std][i])
+                num, stats[:lambda_mean][i], stats[:lambda_std][i])
     end
     println(io, "\nModel Fit:")
     @printf(io, "  Mean R²: %.4f (±%.4f)\n", stats[:R2_mean], stats[:R2_std])
@@ -434,9 +436,10 @@ function Base.show(io::IO, ::MIME"text/plain", model::ContinuousSSSDFOutput)
         @printf(io, "  Factor %d: %.4f\n", i, stats[:inclusion_probabilities][i])
     end
     println(io, "\nRisk Price Estimates:")
-    for i in 1:model.n_factors+1
+    for i in 1:size(stats[:lambda_mean],1)
+        num = ifelse(size(stats[:lambda_mean],1)==model.n_factors,i,i-1)
         @printf(io, "  λ_%d: %.4f (±%.4f)\n", 
-                i-1, stats[:lambda_mean][i], stats[:lambda_std][i])
+                num, stats[:lambda_mean][i], stats[:lambda_std][i])
     end
 end
 
@@ -454,9 +457,10 @@ function Base.show(io::IO, ::MIME"text/plain", model::DiracSSSDFOutput)
         @printf(io, "  Factor %d: %.4f\n", i, stats[:inclusion_probabilities][i])
     end
     println(io, "\nRisk Price Estimates:")
-    for i in 1:model.n_factors+1
+    for i in 1:size(stats[:lambda_mean],1)
+        num = ifelse(size(stats[:lambda_mean],1)==model.n_factors,i,i-1)
         @printf(io, "  λ_%d: %.4f (±%.4f)\n", 
-                i-1, stats[:lambda_mean][i], stats[:lambda_std][i])
+                num, stats[:lambda_mean][i], stats[:lambda_std][i])
     end
 end
 

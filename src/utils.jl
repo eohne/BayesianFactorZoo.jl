@@ -64,7 +64,69 @@ end
 
 
 """
-Map between ψ (psi0) and prior Sharpe ratio of factors.
+    psi_to_priorSR(R::Matrix{Float64}, f::Matrix{Float64}; 
+                  psi0::Union{Nothing,Float64}=nothing,
+                  priorSR::Union{Nothing,Float64}=nothing,
+                  aw::Float64=1.0, bw::Float64=1.0)
+
+Map between prior tightness parameter ``\\psi`` and prior Sharpe ratio.
+
+# Arguments
+- `R`: Matrix of test assets with dimension ``t \\times N``
+- `f`: Matrix of factors with dimension ``t \\times k``
+- `psi0`: Prior tightness parameter to convert to SR
+- `priorSR`: Target SR to convert to psi0
+- `aw,bw`: Beta prior parameters
+
+
+# Returns
+Returns a Float64 value either:
+- The implied prior Sharpe ratio if psi0 provided
+- The required psi0 value if priorSR provided
+
+Note: Returns error message string if neither or both arguments are provided
+
+# Notes
+- Exactly one of psi0 or priorSR must be provided
+- Input matrices R and f must have the same number of rows (time periods)
+- The mapping helps choose priors based on economic intuition about achievable Sharpe ratios
+- Default aw=bw=1 implies 50% prior probability of factor inclusion
+- The relationship is monotonic: higher ψ implies higher prior Sharpe ratio
+- Useful for calibrating priors in continuous_ss_sdf and continuous_ss_sdf_v2
+
+# References
+Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487–557.
+
+# Examples
+```julia
+# Load test data
+# Convert psi0 to implied prior Sharpe ratio
+implied_sr = psi_to_priorSR(R, f; psi0=5.0)
+println("Psi0 = 5.0 implies prior SR = \$implied_sr")
+
+# Find psi0 needed for target Sharpe ratio
+required_psi = psi_to_priorSR(R, f; priorSR=0.5)
+println("For prior SR = 0.5, need psi0 = \$required_psi")
+
+# Use custom Beta prior parameters
+psi_sparse = psi_to_priorSR(R, f; 
+                          priorSR=0.3,
+                          aw=1.0, 
+                          bw=9.0)  # Prior favoring sparsity
+
+# Helper functions also available:
+using BayesianFactorZoo: calculate_prior_SR, find_psi_for_target_SR
+
+# Get prior SR for a given psi
+sr = calculate_prior_SR(5.0, R, f)
+
+# Get psi for a target SR
+psi = find_psi_for_target_SR(0.5, R, f)
+```
+
+# See Also
+- `continuous_ss_sdf`: Main function using this prior calibration
+- `continuous_ss_sdf_v2`: Version for tradable factors using this calibration
 """
 function psi_to_priorSR(R::Matrix{Float64}, f::Matrix{Float64};
     psi0::Union{Nothing,Float64}=nothing,

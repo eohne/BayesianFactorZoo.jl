@@ -1,21 +1,61 @@
 """
     SDF_gmm(R::Matrix{Float64}, f::Matrix{Float64}, W::Matrix{Float64})
 
-GMM estimation of factors' risk prices under linear SDF framework.
+GMM estimation of factor risk prices under linear SDF framework.
 
 # Arguments
-- `R`: Matrix of test assets with dimension t × N
-- `f`: Matrix of factors with dimension t × k
-- `W`: Weighting matrix in GMM estimation. For OLS use identity matrix,
-       for GLS use inverse of return covariance matrix
+- `R`: Matrix of test assets with dimension ``t \\times N``
+- `f`: Matrix of factors with dimension ``t \\times k``
+- `W`: Weighting matrix for GMM estimation, dimension ``(N+k) \\times (N+k)``
 
-# Returns
-Named tuple containing:
-- `lambda_gmm`: GMM estimates of risk prices
-- `mu_f`: Sample means of factors
-- `Avar_hat`: Asymptotic covariance matrix 
-- `R2_adj`: Adjusted cross-sectional R²
-- `S_hat`: Spectral matrix
+# Returns 
+Returns a SDFGMMOutput struct containing:
+- `lambda_gmm::Vector{Float64}`: Vector of length k+1 containing risk price estimates (includes intercept).
+- `mu_f::Vector{Float64}`: Vector of length k containing estimated factor means.
+- `Avar_hat::Matrix{Float64}`: Matrix of size (2k+1) × (2k+1) containing asymptotic covariance matrix.
+- `R2_adj::Float64`: Adjusted cross-sectional ``R^2``.
+- `S_hat::Matrix{Float64}`: Matrix of size (N+k) × (N+k) containing estimated spectral density matrix.
+- Metadata fields accessible via dot notation:
+ - `n_factors::Int`: Number of factors (k)
+ - `n_assets::Int`: Number of test assets (N)
+ - `n_observations::Int`: Number of time periods (t)
+
+# Notes
+- Input matrices R and f must have the same number of rows (time periods)
+- The weighting matrix W should match dimensions (N+k) × (N+k)
+- For tradable factors, weighting matrix should impose self-pricing restrictions
+- Implementation assumes no serial correlation in moment conditions
+- R² is adjusted for degrees of freedom
+- Standard errors are derived under the assumption of correct specification
+
+# References
+Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487–557.
+
+Hansen, Lars Peter (1982). "Large Sample Properties of Generalized Method of Moments Estimators." Econometrica, 50(4), 1029-1054.
+
+# Examples
+```julia
+# Construct OLS weighting matrix
+W_ols = construct_weight_matrix(R, f, "OLS")
+
+# Perform OLS estimation
+results_ols = SDF_gmm(R, f, W_ols)
+
+# Construct GLS weighting matrix
+W_gls = construct_weight_matrix(R, f, "GLS")
+
+# Perform GLS estimation
+results_gls = SDF_gmm(R, f, W_gls)
+
+# Access results
+risk_prices = results_ols.lambda_gmm[2:end]  # Factor risk prices (excluding intercept)
+std_errors = sqrt.(diag(results_ols.Avar_hat)[2:end])  # Standard errors
+r_squared = results_ols.R2_adj  # Adjusted R²
+```
+
+# See Also
+- `construct_weight_matrix`: Function to construct appropriate OLS/GLS weighting matrices
+- `BayesianSDF`: Bayesian alternative that is robust to weak factors
 """
 function SDF_gmm(R::Matrix{Float64}, f::Matrix{Float64}, W::Matrix{Float64})
     # Get dimensions (matching R variable names)
@@ -84,21 +124,78 @@ end
 
 
 """
-    construct_weight_matrix(R::Matrix{Float64}, f::Matrix{Float64}, type::String="OLS", kappa::Float64=1e6)
+    construct_weight_matrix(R::Matrix{Float64}, f::Matrix{Float64}, 
+                         type::String="OLS", kappa::Float64=1e6)
 
-Construct the weighting matrix for GMM estimation.
+Construct weighting matrix for GMM estimation of linear SDF models.
 
 # Arguments
-- `R`: Matrix of test assets with dimension t × N
-- `f`: Matrix of factors with dimension t × k
-- `type`: "OLS" or "GLS" (default: "OLS")
-- `kappa`: Large constant for factor moment conditions (default: 1e6)
+- R: Matrix of test assets with dimension ``t \\times N``
+- f: Matrix of factors with dimension ``t \\times k``
+- type: "OLS" or "GLS", default="OLS"
+- kappa: Large constant for factor moment conditions, default=1e6
+
+# Details
+Constructs a ``(N+k) \\times (N+k)`` block diagonal weighting matrix W:
+
+```math
+W = \\begin{bmatrix} W_R & 0_{N\\times k} \\\\ 0_{k\\times N} & \\kappa I_k \\end{bmatrix}
+```
+
+where:
+
+OLS (type="OLS"):
+
+``W_R = I_N``
+
+GLS (type="GLS"):
+
+``W_R = \\Sigma_R^{-1}``
+
+The structure reflects GMM moment conditions:
+
+```math
+E[g_t(\\lambda_c,\\lambda_f,\\mu_f)] = E[(R_t - \\lambda_c1_N - R_t(f_t - \\mu_f)'\\lambda_f), (f_t - \\mu_f)] = [0_N, 0_k]
+```
 
 # Returns
-- Weight matrix W for GMM estimation with dimension (N+k) × (N+k), where:
-  - Top-left block is N × N identity (OLS) or inverse covariance (GLS)
-  - Bottom-right block is k × k scaled identity
-  - Off-diagonal blocks are zero
+Returns a Matrix{Float64} of size ``(N+k) \\times (N+k)`` containing the weighting matrix W with structure:
+- Upper-left block: Identity (OLS) or inverse return covariance (GLS)
+- Lower-right block: ``\\kappa I_k``
+- Off-diagonal blocks: Zero matrices
+
+Note: The returned matrix matches the dimension requirements of SDF_gmm function
+
+# Notes
+- Input matrices R and f must have the same number of rows (time periods)
+- The GLS version requires a well-conditioned return covariance matrix
+- κ should be large enough to ensure accurate factor mean estimation
+- Output matches dimensions required by SDF_gmm function
+- Block structure is optimal under conditional homoskedasticity
+
+# References
+Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487–557.
+
+Hansen, Lars Peter (1982). "Large Sample Properties of Generalized Method of Moments Estimators." Econometrica, 50(4), 1029-1054.
+
+# Examples
+```julia
+# Construct OLS weighting matrix
+W_ols = construct_weight_matrix(R, f, "OLS")
+
+# Construct GLS weighting matrix
+W_gls = construct_weight_matrix(R, f, "GLS")
+
+# Use custom kappa value
+W_custom = construct_weight_matrix(R, f, "OLS", 1e8)
+
+# Use in GMM estimation
+results_ols = SDF_gmm(R, f, W_ols)
+results_gls = SDF_gmm(R, f, W_gls)
+```
+
+# See Also 
+- `SDF_gmm`: Main function using these weighting matrices
 """
 function construct_weight_matrix(R::Matrix{Float64}, f::Matrix{Float64}, type::String="OLS", kappa::Float64=1e6)
     N = size(R, 2)  # number of test assets

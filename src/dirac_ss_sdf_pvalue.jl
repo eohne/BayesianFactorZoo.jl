@@ -1,13 +1,61 @@
 """
-    dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int, 
-                       lambda0::Vector{Float64}; kwargs...)
+    dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int,
+                      lambda0::Vector{Float64}; psi0::Float64=1.0,
+                      max_k::Union{Int,Nothing}=nothing)
 
 Hypothesis testing for risk prices using Dirac spike-and-slab prior.
+
+# Arguments
+- `f`: Matrix of factors with dimension ``t \\times k``
+- `R`: Matrix of test assets with dimension ``t \\times N``
+- `sim_length`: Length of MCMCs
+- `lambda0`: ``k \\times 1`` vector of null hypothesis values
+- `psi0`: Hyperparameter in prior distribution
+- `max_k`: Maximum number of factors in models (optional)
+
+# Returns
+Returns a DiracSSSDFOutput struct containing:
+- `gamma_path::Matrix{Float64}`: Matrix of size sim_length × k containing posterior draws of factor inclusion indicators.
+- `lambda_path::Matrix{Float64}`: Matrix of size sim_length × (k+1) containing posterior draws of risk prices.
+- `model_probs::Matrix{Float64}`: Matrix of size M × (k+1) where M is the number of possible models. First k columns are model indices (0/1), last column contains model probabilities.
+- Metadata fields accessible via dot notation:
+ - `n_factors::Int`: Number of factors (k)
+ - `n_assets::Int`: Number of test assets (N)
+ - `n_observations::Int`: Number of time periods (t)
+ - `sim_length::Int`: Number of MCMC iterations performed
+
+# Notes
+- Input matrices f and R must have the same number of rows (time periods)
+- The method is particularly useful for testing specific hypotheses about risk prices
+- Setting max_k allows for focused testing of sparse models
+- The Dirac spike provides a more stringent test than the continuous spike-and-slab
+- Bayesian p-values can be constructed by integrating 1-p(γ|data)
+- Model probabilities are properly normalized across the considered model space
+
+# References
+Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487–557.
+
+# Examples
+```julia
+# Test if all risk prices are zero
+lambda0 = zeros(size(f, 2))
+results = dirac_ss_sdf_pvalue(f, R, 10_000, lambda0)
+
+# Test specific values with max 3 factors
+lambda0_alt = [0.5, 0.3, -0.2, 0.1]
+results_sparse = dirac_ss_sdf_pvalue(f, R, 10_000, lambda0_alt; max_k=3)
+
+# Access results
+inclusion_probs = mean(results.gamma_path, dims=1)  # Factor inclusion probabilities
+risk_prices = mean(results.lambda_path, dims=1)     # Posterior mean risk prices
+top_models = results.model_probs[sortperm(results.model_probs[:,end], rev=true)[1:10], :] # Top 10 models
+```
 """
 function dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int,
     lambda0::Vector{Float64}; psi0::Float64=1.0,
     max_k::Union{Int,Nothing}=nothing)
 
+    rngs = [MersenneTwister(i) for i in 1:sim_length]
     # Get dimensions
     t, k = size(f)
     N = size(R, 2)
@@ -60,9 +108,10 @@ function dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length:
     # MCMC loop
     Threads.@threads for j in 1:sim_length
         # First stage: time series regression
-        Sigma = rand(InverseWishart(t-1, t * Sigma_ols))
+        mtwist = rngs[j]
+        Sigma = rand(mtwist,InverseWishart(t-1, t * Sigma_ols))
         Var_mu_half = cholesky(Sigma/t).U
-        mu = mu_ols + transpose(Var_mu_half) * randn(p)
+        mu = mu_ols + transpose(Var_mu_half) * randn(mtwist,p)
 
         # Calculate standardized quantities
         sd_Y = sqrt.(diag(Sigma))
@@ -108,7 +157,7 @@ function dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length:
         # Draw model
         probs = exp.(log_prob)
         probs = probs ./ sum(probs)
-        i = rand(Categorical(probs))
+        i = rand(mtwist,Categorical(probs))
 
         # Handle drawn model
         if i == 1  # null model
@@ -133,11 +182,11 @@ function dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length:
         # Draw sigma2 and lambda
         HH_D_inv = inv(cholesky(transpose(H_i)*H_i + D_i))
         Lambda_hat = HH_D_inv * (transpose(H_i)*a_gamma)
-        sigma2 = rand(InverseGamma(N/2, 
+        sigma2 = rand(mtwist,InverseGamma(N/2, 
                     (transpose(a_gamma - H_i*Lambda_hat)*(a_gamma - H_i*Lambda_hat))[1]/2))
         
         cov_Lambda = sigma2 * HH_D_inv
-        Lambda = Lambda_hat + transpose(cholesky(cov_Lambda).U) * randn(length(Lambda_hat))
+        Lambda = Lambda_hat + transpose(cholesky(cov_Lambda).U) * randn(mtwist,length(Lambda_hat))
 
         # Store results exactly as R
         if length(index) == 0  # null model
