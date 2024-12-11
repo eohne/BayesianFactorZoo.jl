@@ -149,15 +149,18 @@ This package is licensed under GPL-3, as required due to being a port of the GPL
 
 ## Speed
 
+The length of monte-carlo simulations was set to 50,000 and the example data of the R package was used.
+Run on a Ryzen 5700X3D using 8 threads. Multi-threading of the Julia version is indicated by *.
+
 | Method | Julia Time (s) | R Time (s) | Speed Improvement |
 |--------|---------------|------------|-------------------|
 | Two Pass | 0.000290 | 0.003569 | 12.3x |
 | SDF GMM | 0.002003 | 0.017919 | 8.9x |
-| Bayesian FM | 2.922377 | 27.626776 | 9.5x |
-| Bayesian SDF | 3.418054 | 20.833824 | 6.1x |
+| Bayesian FM* | 2.922377 | 27.626776 | 9.5x |
+| Bayesian SDF* | 3.418054 | 20.833824 | 6.1x |
 | Continuous SS SDF | 9.049122 | 30.355302 | 3.4x |
 | Continuous SS SDF v2 | 8.217680 | 31.336624 | 3.8x |
-| Dirac SS SDF P-value | 1.954609 | 29.872320 | 15.3x |
+| Dirac SS SDF P-value* | 1.954609 | 29.872320 | 15.3x |
 
 
 
