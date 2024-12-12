@@ -19,6 +19,11 @@ using Pkg
 Pkg.add("http://github.com/eohne/BayesianFactorZoo.jl")
 ```
 
+
+> **For some examples see the "Tutorial" in the documentation**  
+> [Link to Tutorial](https://eohne.github.io/BayesianFactorZoo.jl/dev/tutorial/)
+
+
 ## Main Functions
 
 ### BayesianFM
