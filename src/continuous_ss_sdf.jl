@@ -12,7 +12,7 @@ struct MCMCConstants
     bw::Float64
     type::String
     intercept::Bool
-    rngs::Vector{MersenneTwister}
+    rngs::MersenneTwister
     t::Int64
     N::Int64
     k::Int64
@@ -154,14 +154,16 @@ function get_sdf!(temp::MCMCTemps, con::MCMCConstants)
 end
 
 function mcmc_step!(con::MCMCConstants, last_state::MCMCStates, output::MCMCOutputs, i::Int, temp::MCMCTemps, k1::Int=con.k)
-    # mtwist = con.rngs[1]
-    mtwist = MersenneTwister(i)
+    mtwist = con.rngs
+
     
     # Draw new covariance matrix from inverse Wishart
+    Random.seed!(mtwist, i)
     rand!(mtwist, con.iw_dist, temp.Sigma)
     
     # Calculate standardized quantities
     copyto!(temp.Var_mu_half, cholesky(Hermitian(temp.Sigma/con.t)).U)
+    Random.seed!(mtwist, i)
     copyto!(temp.mu, con.mu_ols + transpose(temp.Var_mu_half) * randn(mtwist, con.p))
     copyto!(temp.sd_Y, sqrt.(diag(temp.Sigma)))
     
@@ -199,6 +201,7 @@ function mcmc_step!(con::MCMCConstants, last_state::MCMCStates, output::MCMCOutp
         mul!(temp.Lambda, transpose(temp.beta), temp.a)
         ldiv!(temp.Lambda, LowerTriangular(temp.L_beta), temp.Lambda)
         ldiv!(temp.Lambda_hat, transpose(LowerTriangular(temp.L_beta)), temp.Lambda)
+        Random.seed!(mtwist, i)
         randn!(mtwist, temp.z)
         ldiv!(temp.Lambda, transpose(LowerTriangular(temp.L_beta)), temp.z)
         mul!(temp.Lambda, sqrt(last_state.sigma2), temp.Lambda)
@@ -216,6 +219,7 @@ function mcmc_step!(con::MCMCConstants, last_state::MCMCStates, output::MCMCOutp
         mul!(temp.Lambda, transpose(temp.beta_tilde), temp.a_tilde)
         ldiv!(temp.Lambda, LowerTriangular(temp.L_beta), temp.Lambda)
         ldiv!(temp.Lambda_hat, transpose(LowerTriangular(temp.L_beta)), temp.Lambda)
+        Random.seed!(mtwist, i)
         randn!(mtwist, temp.z)
         ldiv!(temp.Lambda, transpose(LowerTriangular(temp.L_beta)), temp.z)
         mul!(temp.Lambda, sqrt(last_state.sigma2), temp.Lambda)
@@ -227,10 +231,12 @@ function mcmc_step!(con::MCMCConstants, last_state::MCMCStates, output::MCMCOutp
     @. temp.prob = min(temp.prob, 1000.0)
     @. temp.prob = temp.prob / (1 + temp.prob)
     
+    Random.seed!(mtwist, i)
     @. temp.gamma = rand(mtwist, Bernoulli(temp.prob))
     @. last_state.r_gamma = ifelse(temp.gamma == 1, 1.0, con.r)
     output.gamma_path[i, :] = temp.gamma
     
+    Random.seed!(mtwist, i)
     @. last_state.omega = rand(mtwist, Beta(con.aw + temp.gamma, con.bw + 1 - temp.gamma))
 
     if con.type == "OLS"
@@ -240,6 +246,7 @@ function mcmc_step!(con::MCMCConstants, last_state::MCMCStates, output::MCMCOutp
         mul!(temp.scale3, transpose(temp.Lambda) * temp.D, temp.Lambda)
         @. temp.scale2 += temp.scale3
         @. temp.scale2 /= 2
+        Random.seed!(mtwist, i)
         last_state.sigma2 = rand(mtwist, InverseGamma(con.dof2, first(temp.scale2)))
     else
         mul!(temp.resid, temp.beta, temp.Lambda)
@@ -249,6 +256,7 @@ function mcmc_step!(con::MCMCConstants, last_state::MCMCStates, output::MCMCOutp
         mul!(temp.scale3, transpose(temp.Lambda) * temp.D, temp.Lambda)
         @. temp.scale2 += temp.scale3
         @. temp.scale2 /= 2
+        Random.seed!(mtwist, i)
         last_state.sigma2 = rand(mtwist, InverseGamma(con.dof2, first(temp.scale2)))
     end
 
@@ -324,8 +332,7 @@ function continuous_ss_sdf(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::I
     type::String="OLS", intercept::Bool=true)
     
     # Initialize random number generators
-    mtwist = MersenneTwister()
-    rngs = [MersenneTwister()]
+    mtwist = MersenneTwister(1)
     
     # Get dimensions
     t, k = size(f)
@@ -382,12 +389,13 @@ function continuous_ss_sdf(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::I
     
     # Initialize constants
     con = MCMCConstants(
-        f, psi, r, aw, bw, type, intercept, rngs,
+        f, psi, r, aw, bw, type, intercept, mtwist,
         t, N, k, p, Y, InverseWishart(t - 1, t * Sigma_ols),
         mu_ols, dof2
     )
     
     # Initialize state
+    Random.seed!(mtwist, 1)
     last_state = MCMCStates(
         ifelse.(rand(mtwist, Bernoulli(0.5), k) .== 1, 1.0, r),
         (transpose(a_ols - beta_ols * Lambda_ols) * (a_ols - beta_ols * Lambda_ols))[1] / N,

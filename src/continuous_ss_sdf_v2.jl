@@ -67,10 +67,7 @@ function continuous_ss_sdf_v2(f1::Matrix{Float64}, f2::Matrix{Float64}, R::Matri
     type::String="OLS", intercept::Bool=true)
     
     # Initialize random number generators
-    # mtwist = MersenneTwister()
-    mtwist = MersenneTwister()
-    # rngs = [MersenneTwister(i) for i in 1:sim_length]
-    rngs = [MersenneTwister() for i in 1:1]
+    mtwist = MersenneTwister(1)
     
     # Get dimensions
     t = size(f1, 1)
@@ -134,9 +131,10 @@ function continuous_ss_sdf_v2(f1::Matrix{Float64}, f2::Matrix{Float64}, R::Matri
     )
     
     # Initialize Constants with dof2 as the last parameter
-    con = MCMCConstants(f, psi, r, aw, bw, type, intercept, rngs, t, N, k, p, Y, iw_dist, mu_ols, dof2)
+    con = MCMCConstants(f, psi, r, aw, bw, type, intercept, mtwist, t, N, k, p, Y, iw_dist, mu_ols, dof2)
     
     # Initialize State Variables
+    Random.seed!(mtwist, 1)
     last_state = MCMCStates(
         ifelse.(rand(mtwist, Bernoulli(0.5), k) .== 1, 1.0, r),
         (transpose(a_ols - beta_ols * Lambda_ols) * (a_ols - beta_ols * Lambda_ols))[1] / N,

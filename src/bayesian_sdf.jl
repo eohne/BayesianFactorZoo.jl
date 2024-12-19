@@ -101,11 +101,13 @@ function BayesianSDF(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int=100
     Threads.@threads for i in 1:sim_length
         mtwist = rngs[i]
         # First stage: time series regression
+        Random.seed!(mtwist, i)
         Sigma = rand(mtwist,iw_dist)
         Sigma_R = Sigma[k+1:end, k+1:end]
         
         # Draw means (matching R's approach)
         Var_mu_half = cholesky(Sigma/t).U
+        Random.seed!(mtwist, i)
         mu = mu_ols + transpose(Var_mu_half) * randn(mtwist,p)
         
         # Calculate quantities for second stage

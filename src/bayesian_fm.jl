@@ -61,6 +61,7 @@ function BayesianFM(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int)
     Threads.@threads for i in 1:sim_length
         # Draw from inverse Wishart
         mtwist = rngs[i]
+        Random.seed!(mtwist, i)
         Sigma = rand(mtwist,iw_dist)
         
         # Extract components (matching R's indexing approach)
@@ -70,6 +71,7 @@ function BayesianFM(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int)
 
         # Draw means (matching R's approach)
         Var_mu_half = cholesky(Sigma/t).U'
+        Random.seed!(mtwist, i)
         mu = mu_ols + Var_mu_half * randn(mtwist,size(Y, 2))
         
         # Extract means
