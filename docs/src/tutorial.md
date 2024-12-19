@@ -586,40 +586,6 @@ Console Output:
 ```julia
 The posterior distribution of model dimensions (= 0, 1, 2, 3): [0.015, 0.214, 0.553, 0.218]
 ```
-<!-- #### Optional: Visualize results
-
-##### Plot posterior distribution of model dimensions
-```julia
-p1 = bar(0:3, dim_props,
-    xlabel="Model Dimension",
-    ylabel="Probability",
-    title="Posterior Distribution of Model Dimensions",
-    label="")
-```
-![Model Dimension](assets/c_ss_sdf_v2_mdim.svg)
-##### Plot SDF paths
-```julia
-p2 = plot(1:size(shrinkage.sdf_path,2), shrinkage.bma_sdf,
-    label="BMA-SDF",
-    linewidth=2,
-    color=:black,
-    title="SDF Paths and BMA-SDF");
-```
-![BMA-SDF](assets/c_ss_sdf_v2_bmasdf.svg)
-##### Add sample paths
-```julia
-function add_sample_paths!(p, shrinkage, n)
-    for i in 1:min(n, size(shrinkage.sdf_path,1))
-        plot!(p, 1:size(shrinkage.sdf_path,2), shrinkage.sdf_path[i,:],
-            alpha=0.1,
-            color=:blue,
-            label="")
-    end
-end
-add_sample_paths!(p2,shrinkage,50)
-plot(p1, p2, layout=(1,2), size=(1200,400))
-```
-![Model Dimension BMA-SDF Path and Sample Paths](assets/c_ss_sdf_v2_both.svg) -->
 
 
 
@@ -775,25 +741,3 @@ Posterior model probabilities with max_k=1 are:
  1.0  0.0  0.929
  0.0  1.0  0.034
 ```
-<!-- ### Visualize posterior probabilities
-
-#### Plot posterior probabilities for each factor
-```julia
-p1 = bar(mean(shrinkage.gamma_path, dims=1)',
-    title="Factor Inclusion Probabilities",
-    xlabel="Factor",
-    ylabel="Probability",
-    label="",
-    xticks=(1:2, ["Strong", "Useless"]))
-```
-![Factor Inclusion Probabilities](assets/pvalue_inc_prob.svg)
-#### Plot model probabilities
-```julia
-p2 = bar(shrinkage.model_probs[:,end],
-    title="Model Posterior Probabilities",
-    xlabel="Model Index",
-    ylabel="Probability",
-    label="")
-plot(p1, p2, layout=(1,2), size=(1200,400),bottom_margin=5Plots.mm)
-```
-![Inc Prob and Model Post. Prob.](assets/pvalue_inc_prob_model_post_prob.svg) -->
