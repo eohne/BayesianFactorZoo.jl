@@ -109,10 +109,10 @@ function dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length:
     Threads.@threads for j in 1:sim_length
         # First stage: time series regression
         mtwist = rngs[j]
-        Random.seed!(mtwist, j)
+        # Random.seed!(mtwist, j)
         Sigma = rand(mtwist,InverseWishart(t-1, t * Sigma_ols))
         Var_mu_half = cholesky(Sigma/t).U
-        Random.seed!(mtwist, j)
+        # Random.seed!(mtwist, j)
         mu = mu_ols + transpose(Var_mu_half) * randn(mtwist,p)
 
         # Calculate standardized quantities
@@ -159,7 +159,7 @@ function dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length:
         # Draw model
         probs = exp.(log_prob)
         probs = probs ./ sum(probs)
-        Random.seed!(mtwist, j)
+        # Random.seed!(mtwist, j)
         i = rand(mtwist,Categorical(probs))
 
         # Handle drawn model
@@ -172,8 +172,7 @@ function dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length:
             index = findall(x -> x == 1, modelsets[i])
             H_i = hcat(ones(N), beta_f[:, index])
             D_i = D[vcat(1, index .+ 1), vcat(1, index .+ 1)]
-            gamma_path[j, index] .= 1
-            
+           
             if length(index) == k
                 a_gamma = a
             else
@@ -182,15 +181,18 @@ function dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length:
             end
         end
 
+        if i != 1  # Only update gamma_path for non-null models
+            gamma_path[j, index] .= 1
+        end
         # Draw sigma2 and lambda
         HH_D_inv = inv(cholesky(transpose(H_i)*H_i + D_i))
         Lambda_hat = HH_D_inv * (transpose(H_i)*a_gamma)
-        Random.seed!(mtwist, j)
+        # Random.seed!(mtwist, j)
         sigma2 = rand(mtwist,InverseGamma(N/2, 
                     (transpose(a_gamma - H_i*Lambda_hat)*(a_gamma - H_i*Lambda_hat))[1]/2))
         
         cov_Lambda = sigma2 * HH_D_inv
-        Random.seed!(mtwist, j)
+        # Random.seed!(mtwist, j)
         Lambda = Lambda_hat + transpose(cholesky(cov_Lambda).U) * randn(mtwist,length(Lambda_hat))
 
         # Store results exactly as R

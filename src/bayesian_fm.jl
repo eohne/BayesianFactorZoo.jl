@@ -61,7 +61,7 @@ function BayesianFM(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int)
     Threads.@threads for i in 1:sim_length
         # Draw from inverse Wishart
         mtwist = rngs[i]
-        Random.seed!(mtwist, i)
+        # Random.seed!(mtwist, i)
         Sigma = rand(mtwist,iw_dist)
         
         # Extract components (matching R's indexing approach)
@@ -70,9 +70,9 @@ function BayesianFM(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int)
         Sigma_Rf = Sigma[k+1:end, 1:k]
 
         # Draw means (matching R's approach)
-        Var_mu_half = cholesky(Sigma/t).U'
-        Random.seed!(mtwist, i)
-        mu = mu_ols + Var_mu_half * randn(mtwist,size(Y, 2))
+        Var_mu_half = cholesky(Sigma/t).U
+        # Random.seed!(mtwist, i)
+        mu = mu_ols + transpose(Var_mu_half) * randn(mtwist,size(Y, 2))
         
         # Extract means
         a = mu[k+1:end]
@@ -86,21 +86,24 @@ function BayesianFM(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int)
         H = hcat(ones(N), C)
         
         # OLS estimation (matching R)
-        HH_inv = inv(H'H)
-        Lambda_ols = HH_inv * (H'a)
+        HH_inv = inv(cholesky(transpose(H)*H))
+        Lambda_ols = HH_inv * (transpose(H)*a)
         
         # GLS estimation (matching R)
         Sigma_eps_inv = inv(Sigma_eps)
-        Lambda_gls = inv(H'Sigma_eps_inv * H) * (H'Sigma_eps_inv * a)
+        # Lambda_gls = inv(H'Sigma_eps_inv * H) * (H'Sigma_eps_inv * a)
+        Lambda_gls = inv(cholesky(Hermitian(transpose(H)*Sigma_eps_inv * H))) * (H'Sigma_eps_inv * a)
+
+
 
         # Calculate R² (matching R's formulas exactly)
-        R2_ols = 1 - ((a - H * Lambda_ols)'*(a - H * Lambda_ols))[1] / ((N-1)*var(vec(a)))
+        R2_ols = 1 - (((a - H * Lambda_ols)'*(a - H * Lambda_ols))[1] / ((N-1)*var(vec(a))))
         R2_ols_adj = 1 - (1-R2_ols) * (N-1) / (N-1-k)
         
         # GLS R² (matching R)
         a_centered = a .- mean(a)
-        R2_gls = 1 - (a - H * Lambda_gls)'Sigma_eps_inv*(a - H * Lambda_gls) / 
-                     (a_centered'Sigma_eps_inv*a_centered)
+        R2_gls = 1 - ((transpose(a - H * Lambda_gls)*Sigma_eps_inv*(a - H * Lambda_gls)) / 
+                     (transpose(a_centered)*Sigma_eps_inv*a_centered))
         R2_gls_adj = 1 - (1-R2_gls) * (N-1) / (N-1-k)
 
         # Store results

@@ -100,6 +100,11 @@ function MCMCTemps(intercept::Bool, p::Int, N::Int, k::Int, t::Int)
     )
 end
 
+
+@inline function chol_inv!(x::Matrix{Float64})
+    LinearAlgebra.inv!(cholesky!(Hermitian(x)))
+end
+
 function compute_log_odds!(result::Vector{Float64}, 
     last_state::MCMCStates, 
     con::MCMCConstants, 
@@ -154,11 +159,9 @@ function get_sdf!(temp::MCMCTemps, con::MCMCConstants)
 end
 
 function mcmc_step!(con::MCMCConstants, last_state::MCMCStates, output::MCMCOutputs, i::Int, temp::MCMCTemps, k1::Int=con.k)
-    mtwist = con.rngs
-
-    
+    mtwist = MersenneTwister(i)
     # Draw new covariance matrix from inverse Wishart
-    Random.seed!(mtwist, i)
+    # Random.seed!(mtwist, i)
     rand!(mtwist, con.iw_dist, temp.Sigma)
     
     # Calculate standardized quantities
@@ -194,35 +197,64 @@ function mcmc_step!(con::MCMCConstants, last_state::MCMCStates, output::MCMCOutp
     end
 
     if con.type == "OLS"
+        # First compute t(beta)%*%beta + D in temp.L_beta
         mul!(temp.L_beta, transpose(temp.beta), temp.beta)
         temp.L_beta .+= temp.D
-        cholesky!(temp.L_beta)
-        transpose!(UpperTriangular(temp.L_beta))
-        mul!(temp.Lambda, transpose(temp.beta), temp.a)
-        ldiv!(temp.Lambda, LowerTriangular(temp.L_beta), temp.Lambda)
-        ldiv!(temp.Lambda_hat, transpose(LowerTriangular(temp.L_beta)), temp.Lambda)
+        
+        # Get beta_D_inv (equivalent to chol2inv(chol(...)))
+        chol_inv!(temp.L_beta)
+
+        # Calculate Lambda_hat = beta_D_inv %*% t(beta)%*%a
+        mul!(temp.Lambda, transpose(temp.beta), temp.a)  # Store t(beta)%*%a in temp.Lambda
+        mul!(temp.Lambda_hat, ((temp.L_beta)), temp.Lambda)  # Now temp.Lambda_hat has beta_D_inv %*% t(beta)%*%a
+        
+        # Calculate cov_Lambda = sigma2 * beta_D_inv
+        # temp.L_beta still contains beta_D_inv, so multiply it by sigma2
+        temp.L_beta .*= last_state.sigma2
+        
+        # Generate random component
         Random.seed!(mtwist, i)
         randn!(mtwist, temp.z)
-        ldiv!(temp.Lambda, transpose(LowerTriangular(temp.L_beta)), temp.z)
-        mul!(temp.Lambda, sqrt(last_state.sigma2), temp.Lambda)
+        
+        # Get Cholesky of cov_Lambda (temp.L_beta contains cov_Lambda)
+        cholesky!(Symmetric(temp.L_beta))
+        mul!(temp.Lambda, transpose(UpperTriangular(temp.L_beta)), temp.z)
+        
+        # Add deterministic and random parts
         temp.Lambda .+= temp.Lambda_hat
+
     else
+        # First solve(corrR)
         copyto!(temp.L_R, temp.corrR)
-        cholesky!(temp.L_R)
-        transpose!(UpperTriangular(temp.L_R))
-        ldiv!(temp.beta_tilde, LowerTriangular(temp.L_R), temp.beta)
-        ldiv!(temp.a_tilde, LowerTriangular(temp.L_R), temp.a)
-        mul!(temp.L_beta, transpose(temp.beta_tilde), temp.beta_tilde)
-        temp.L_beta .+= temp.D
-        cholesky!(temp.L_beta)
-        transpose!(UpperTriangular(temp.L_beta))
-        mul!(temp.Lambda, transpose(temp.beta_tilde), temp.a_tilde)
-        ldiv!(temp.Lambda, LowerTriangular(temp.L_beta), temp.Lambda)
-        ldiv!(temp.Lambda_hat, transpose(LowerTriangular(temp.L_beta)), temp.Lambda)
-        Random.seed!(mtwist, i)
+        chol_inv!(temp.L_R)
+
+        # Calculate t(beta)%*%solve(corrR)%*%beta + D
+        mul!(temp.beta_tilde, temp.L_R, temp.beta)  # solve(corrR)%*%beta -> 25x2
+        mul!(temp.L_beta, transpose(temp.beta), temp.beta_tilde)  # t(beta)%*%solve(corrR)%*%beta -> 2x2
+        temp.L_beta .+= temp.D  # 2x2
+
+        # Get beta_D_inv (2x2)
+        chol_inv!(temp.L_beta)
+
+        # Calculate Lambda_hat = beta_D_inv %*% t(beta)%*%solve(corrR)%*%a
+        mul!(temp.a_tilde, temp.L_R, temp.a)  # solve(corrR)%*%a -> 25x1
+        mul!(temp.Lambda, transpose(temp.beta), temp.a_tilde)  # t(beta)%*%solve(corrR)%*%a -> 2x1
+        mul!(temp.Lambda_hat, temp.L_beta, temp.Lambda)  # beta_D_inv %*% (t(beta)%*%solve(corrR)%*%a) -> 2x1
+
+        # Calculate cov_Lambda = sigma2 * beta_D_inv (2x2)
+        temp.L_beta .*= last_state.sigma2
+
+
+
+        # Generate random component
+        # Random.seed!(mtwist, i)
         randn!(mtwist, temp.z)
-        ldiv!(temp.Lambda, transpose(LowerTriangular(temp.L_beta)), temp.z)
-        mul!(temp.Lambda, sqrt(last_state.sigma2), temp.Lambda)
+
+        # Get Cholesky of cov_Lambda 
+        cholesky!(Hermitian(temp.L_beta))
+        mul!(temp.Lambda, transpose(UpperTriangular(temp.L_beta)), temp.z)
+
+        # Add deterministic and random parts
         temp.Lambda .+= temp.Lambda_hat
     end
 
@@ -231,12 +263,12 @@ function mcmc_step!(con::MCMCConstants, last_state::MCMCStates, output::MCMCOutp
     @. temp.prob = min(temp.prob, 1000.0)
     @. temp.prob = temp.prob / (1 + temp.prob)
     
-    Random.seed!(mtwist, i)
+    # Random.seed!(mtwist, i)
     @. temp.gamma = rand(mtwist, Bernoulli(temp.prob))
     @. last_state.r_gamma = ifelse(temp.gamma == 1, 1.0, con.r)
     output.gamma_path[i, :] = temp.gamma
     
-    Random.seed!(mtwist, i)
+    # Random.seed!(mtwist, i)
     @. last_state.omega = rand(mtwist, Beta(con.aw + temp.gamma, con.bw + 1 - temp.gamma))
 
     if con.type == "OLS"
@@ -246,17 +278,17 @@ function mcmc_step!(con::MCMCConstants, last_state::MCMCStates, output::MCMCOutp
         mul!(temp.scale3, transpose(temp.Lambda) * temp.D, temp.Lambda)
         @. temp.scale2 += temp.scale3
         @. temp.scale2 /= 2
-        Random.seed!(mtwist, i)
+        # Random.seed!(mtwist, i)
         last_state.sigma2 = rand(mtwist, InverseGamma(con.dof2, first(temp.scale2)))
     else
         mul!(temp.resid, temp.beta, temp.Lambda)
-        @. temp.resid = temp.a - temp.resid
-        ldiv!(temp.resid, LowerTriangular(temp.L_R), temp.resid)
-        mul!(temp.scale2, transpose(temp.resid), temp.resid)
-        mul!(temp.scale3, transpose(temp.Lambda) * temp.D, temp.Lambda)
+        @. temp.resid = temp.a - temp.resid                    # now resid has (a-beta%*%Lambda)
+        mul!(temp.a_tilde, temp.L_R, temp.resid)               # solve(corrR)%*%(a-beta%*%Lambda)
+        mul!(temp.scale2, transpose(temp.resid), temp.a_tilde)  # t(a-beta%*%Lambda)%*%solve(corrR)%*%(a-beta%*%Lambda)
+        mul!(temp.scale3, transpose(temp.Lambda) * temp.D, temp.Lambda)  # t(Lambda)%*%D%*%Lambda
         @. temp.scale2 += temp.scale3
         @. temp.scale2 /= 2
-        Random.seed!(mtwist, i)
+        # Random.seed!(mtwist, i)
         last_state.sigma2 = rand(mtwist, InverseGamma(con.dof2, first(temp.scale2)))
     end
 
@@ -376,8 +408,8 @@ function continuous_ss_sdf(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::I
     end
     
     # Pre-compute distributions and constants
-    bernoulli_dist = [Bernoulli(0.5) for _ in 1:k]
-    beta_dist_base = [Beta(aw + 1, bw + 1) for _ in 1:k]
+    # bernoulli_dist = [Bernoulli(0.5) for _ in 1:k]
+    # beta_dist_base = [Beta(aw + 1, bw + 1) for _ in 1:k]
     dof2 = intercept ? (N + k + 1) / 2 : (N + k) / 2
     
     # Initialize outputs
