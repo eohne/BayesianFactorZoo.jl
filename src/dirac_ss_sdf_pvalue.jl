@@ -55,7 +55,7 @@ function dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length:
     lambda0::Vector{Float64}; psi0::Float64=1.0,
     max_k::Union{Int,Nothing}=nothing)
 
-    rngs = [MersenneTwister(i) for i in 1:sim_length]
+    rngs = [MersenneTwister() for i in 1:Threads.nthreads()]
     # Get dimensions
     t, k = size(f)
     N = size(R, 2)
@@ -108,8 +108,8 @@ function dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length:
     # MCMC loop
     Threads.@threads for j in 1:sim_length
         # First stage: time series regression
-        mtwist = rngs[j]
-        # Random.seed!(mtwist, j)
+        mtwist = rngs[Threads.threadid()]
+        Random.seed!(mtwist, j)
         Sigma = rand(mtwist,InverseWishart(t-1, t * Sigma_ols))
         Var_mu_half = cholesky(Sigma/t).U
         # Random.seed!(mtwist, j)

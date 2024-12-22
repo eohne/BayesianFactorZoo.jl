@@ -101,9 +101,6 @@ function MCMCTemps(intercept::Bool, p::Int, N::Int, k::Int, t::Int)
 end
 
 
-@inline function chol_inv!(x::Matrix{Float64})
-    LinearAlgebra.inv!(cholesky!(Hermitian(x)))
-end
 
 function compute_log_odds!(result::Vector{Float64}, 
     last_state::MCMCStates, 

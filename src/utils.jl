@@ -1,3 +1,7 @@
+@inline function chol_inv!(x::Matrix{Float64})
+    LinearAlgebra.inv!(cholesky!(Hermitian(x)))
+end
+
 """
 Check input validity for Bayesian estimation functions
 """

@@ -96,14 +96,14 @@ function BayesianSDF(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int=100
 
     # Setup inverse Wishart with exact R scale
     iw_dist = InverseWishart(t - 1, t * Sigma_ols)
-    rngs = [MersenneTwister(i) for i in 1:sim_length]
+    rngs = [MersenneTwister() for i in 1:Threads.nthreads()]
     # MCMC loop
     Threads.@threads for i in 1:sim_length
-        mtwist = rngs[i]
+        mtwist = rngs[Threads.threadid()]
+        Random.seed!(mtwist, i)
         # First stage: time series regression
-        # Random.seed!(mtwist, i)
         Sigma = rand(mtwist,iw_dist)
-        Sigma_R = Sigma[k+1:end, k+1:end]
+        # Sigma_R = Sigma[k+1:end, k+1:end]
         
         # Draw means (matching R's approach)
         Var_mu_half = cholesky(Sigma/t).U
@@ -119,27 +119,40 @@ function BayesianSDF(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int=100
         # Cross-sectional regression
         H = intercept ? hcat(ones_N, C_f) : C_f
         
-        # Use cholesky for matrix inversion like R
-        Sigma_inv = inv(cholesky(Hermitian(corr_Y[k+1:end, k+1:end])))
+        # Sigma_inv = inv(cholesky(Hermitian(corr_Y[k+1:end, k+1:end])))
+        Sigma_inv = corr_Y[k+1:end, k+1:end]
+        chol_inv!(Sigma_inv)
 
         # Calculate lambda based on prior and type (matching R's formulas)
         local Lambda, R2
         if prior == "Flat"
             if type == "OLS"
-                Lambda = inv(cholesky(Hermitian(transpose(H)*H))) * (transpose(H)*a)
+                Lambda = transpose(H)*H
+                chol_inv!(Lambda)
+                Lambda= Lambda*(transpose(H)*a)
+                # Lambda = inv(cholesky(Hermitian(transpose(H)*H))) * (transpose(H)*a)
                 R2 = 1 - ((transpose(a - H * Lambda) * (a - H * Lambda))[1] / ((N-1) * var(vec(a))))
             else # GLS
-                Lambda = inv(cholesky(Hermitian(transpose(H)*Sigma_inv*H))) * (transpose(H)*Sigma_inv*a)
+                Lambda = transpose(H)*Sigma_inv*H 
+                Lambda = Lambda* (transpose(H)*Sigma_inv*a)
+                # Lambda = inv(cholesky(Hermitian(transpose(H)*Sigma_inv*H))) * (transpose(H)*Sigma_inv*a)
                 a_centered = a .- mean(a)
                 R2 = 1 - transpose(a - H * Lambda)*Sigma_inv*(a - H * Lambda) / 
                         (transpose(a_centered)*Sigma_inv*a_centered)
             end
         else # Normal prior
             if type == "OLS"
-                Lambda = inv(cholesky(Hermitian(transpose(H)*H + D))) * (transpose(H)*a)
+                Lambda = transpose(H)*H
+                Lambda .+= D
+                chol_inv!(Lambda)
+                Lambda= Lambda*(transpose(H)*a)
+                # Lambda = inv(cholesky(Hermitian(transpose(H)*H + D))) * (transpose(H)*a)
                 R2 = 1 - ((transpose(a - H*Lambda) * (a - H*Lambda))[1] / ((N-1)*var(vec(a))))
             else # GLS
-                Lambda = inv(cholesky(Hermitian(transpose(H)*Sigma_inv*H + D))) * (transpose(H)*Sigma_inv*a)
+                Lambda = transpose(H)*Sigma_inv*H 
+                Lambda .+= D
+                Lambda = Lambda* (transpose(H)*Sigma_inv*a)
+                # Lambda = inv(cholesky(Hermitian(transpose(H)*Sigma_inv*H + D))) * (transpose(H)*Sigma_inv*a)
                 a_centered = a .- mean(a)
                 R2 = 1 - transpose(a - H*Lambda)*Sigma_inv*(a - H*Lambda) / 
                         (transpose(a_centered)*Sigma_inv*a_centered)

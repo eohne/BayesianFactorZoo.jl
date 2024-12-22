@@ -57,11 +57,11 @@ function BayesianFM(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int)
     
     # Setup inverse Wishart with exact R scale
     iw_dist = InverseWishart(t - 1, t * Sigma_ols)
-    rngs = [MersenneTwister(i) for i in 1:sim_length]
+    rngs = [MersenneTwister() for i in 1:Threads.nthreads()]
     Threads.@threads for i in 1:sim_length
         # Draw from inverse Wishart
-        mtwist = rngs[i]
-        # Random.seed!(mtwist, i)
+        mtwist = rngs[Threads.threadid()]
+        Random.seed!(mtwist, i)
         Sigma = rand(mtwist,iw_dist)
         
         # Extract components (matching R's indexing approach)
@@ -79,21 +79,29 @@ function BayesianFM(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int)
         mu_f = mu[1:k]
 
         # Calculate C (beta) using R's covariance approach
-        C = Sigma_Rf * inv(Sigma_f)
-        Sigma_eps = Sigma_R - Sigma_Rf * inv(Sigma_f) * Sigma_Rf'
+        chol_inv!(Sigma_f) 
+        C = Sigma_Rf * Sigma_f
+        Sigma_eps = Sigma_R - Sigma_Rf * Sigma_f * Sigma_Rf'
+        # C = Sigma_Rf * inv(Sigma_f)
+        # Sigma_eps = Sigma_R - Sigma_Rf * inv(Sigma_f) * Sigma_Rf'
+ 
 
         # Build H matrix
         H = hcat(ones(N), C)
         
         # OLS estimation (matching R)
-        HH_inv = inv(cholesky(transpose(H)*H))
+        HH_inv = transpose(H)*H
+        chol_inv!(HH_inv)
+        # HH_inv = inv(cholesky(transpose(H)*H))
         Lambda_ols = HH_inv * (transpose(H)*a)
         
         # GLS estimation (matching R)
         Sigma_eps_inv = inv(Sigma_eps)
-        # Lambda_gls = inv(H'Sigma_eps_inv * H) * (H'Sigma_eps_inv * a)
-        Lambda_gls = inv(cholesky(Hermitian(transpose(H)*Sigma_eps_inv * H))) * (H'Sigma_eps_inv * a)
-
+        # Lambda_gls = inv(cholesky(Hermitian(transpose(H)*Sigma_eps_inv * H))) * (H'Sigma_eps_inv * a)
+        Lambda_gls = transpose(H)*Sigma_eps_inv * H
+        chol_inv!(Lambda_gls)
+        Lambda_gls = Lambda_gls * (transpose(H) * Sigma_eps_inv * a)
+        # Lambda_gls = inv(cholesky(Hermitian(transpose(H)*Sigma_eps_inv * H))) * (H'Sigma_eps_inv * a)
 
 
         # Calculate R² (matching R's formulas exactly)

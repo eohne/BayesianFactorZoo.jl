@@ -154,18 +154,18 @@ This package is licensed under GPL-3, as required due to being a port of the GPL
 
 ## Speed
 
-The length of monte-carlo simulations was set to 25,000 and the example data of the R package was used. I ran each function 10 times and report the median values.
+The length of monte-carlo simulations was set to 100,000 and the example data of the R package was used. I ran each function 10 times and report the median values.
 Timings are from a Laptop with a Ryzen 9 6900HS using 8 threads. Multi-threading of the Julia version is indicated by *.
 
 | Method | Julia Time (s) | R Time (s) | Speed Improvement |
 |--------|---------------|------------|-------------------|
-| Two Pass | 0.0006 | 0.0025 | 4.2x |
-| SDF GMM | 0.0012 | 0.0168 | 14.3x |
-| Bayesian FM* | 1.2922 | 12.2965 | 9.5x |
-| Bayesian SDF* | 1.5481 | 9.9251 | 6.4x |
-| Continuous SS SDF | 5.4741 | 13.3504 | 2.4x |
-| Continuous SS SDF v2 | 5.4530 | 15.4134 | 2.8x |
-| Dirac SS SDF P-value* | 1.3837 | 14.2658 | 10.3x |
+| Two Pass | 0.0005 | 0.0025 | 5.0x |
+| SDF GMM | 0.0011 | 0.0191 | 17.4x |
+| Bayesian FM* | 3.0535 | 48.6653 | 15.9x |
+| Bayesian SDF* | 3.6099 | 36.8375 | 10.2x |
+| Continuous SS SDF | 20.3824 | 50.6916 | 2.5x |
+| Continuous SS SDF v2 | 20.9998 | 57.7819 | 2.8x |
+| Dirac SS SDF P-value* | 2.9513 | 54.7477 | 18.6x |
 
 
 [docs-latest-img]: https://img.shields.io/badge/docs-latest-blue.svg
