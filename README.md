@@ -1,7 +1,7 @@
 # BayesianFactorZoo.jl
 
 [![][docs-latest-img]][docs-latest-url]
-[![CI](https://github.com/eohne/BayesianFactorZoo.jl/actions/workflows/CI.yml/badge.svg)]
+![CI](https://github.com/eohne/BayesianFactorZoo.jl/actions/workflows/CI.yml/badge.svg)
 
 BayesianFactorZoo.jl is a Julia port of the R package `BayesianFactorZoo` ([CRAN link](https://cran.r-project.org/web/packages/BayesianFactorZoo/index.html)) implementing the econometric methods from the paper:
 
