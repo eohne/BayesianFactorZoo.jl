@@ -142,8 +142,7 @@ function dirac_ss_sdf_pvalue(
             else
                 index = findall(x -> x == 1, modelsets[i])
                 H_i = hcat(ones(N), beta_f[:, index])
-                d_idx = vcat(1, index .+ 1)
-                D_i = Matrix(D[d_idx, d_idx])
+                D_i = D[vcat(1, index .+ 1), vcat(1, index .+ 1)]
 
                 if length(index) == k  # full model
                     a_gamma = a
@@ -178,8 +177,7 @@ function dirac_ss_sdf_pvalue(
         else
             index = findall(x -> x == 1, modelsets[i])
             H_i = hcat(ones(N), beta_f[:, index])
-            d_idx = vcat(1, index .+ 1)
-            D_i = Matrix(D[d_idx, d_idx])           
+            D_i = D[vcat(1, index .+ 1), vcat(1, index .+ 1)]           
             if length(index) == k
                 a_gamma = a
             else
