@@ -99,7 +99,7 @@ Note: Returns error message string if neither or both arguments are provided
 - Useful for calibrating priors in continuous_ss_sdf and continuous_ss_sdf_v2
 
 # References
-Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487–557.
+Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487-557.
 
 # Examples
 ```julia

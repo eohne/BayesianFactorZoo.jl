@@ -1,17 +1,25 @@
 # Examples (from R Documentation)
 
+Note: stochastic methods in this package accept an optional `seed` keyword for reproducible results, e.g. `BayesianFM(sim_f, sim_R, 2000; seed=123)`.
+
 ## Set Up
 
 ### Load Required Packages
 
 ```julia
-using BayesianFactorZoo
-using RCall # to get the orignal example data
-using DataFrames
-using StatsPlots # Plotting
-using Distributions
-using Statistics
-using StatsBase
+using BayesianFactorZoo   # Core functionality
+
+# Data loading (optional)
+using RCall               # Load example data from the original R package
+
+# Visualization (optional)
+using DataFrames          # Organize results for plotting
+using StatsPlots          # Plotting
+
+# Utilities (optional)
+using Distributions       # Simulate comparison draws
+using Statistics          # Mean, std, etc.
+using StatsBase           # Quantiles, counts
 ```
 
 ### Load Data From the R Package

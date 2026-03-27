@@ -17,12 +17,12 @@ Returns a TwoPassRegressionOutput struct containing:
 - R2_adj_GLS::Float64: GLS adjusted R².
 - alpha::Vector{Float64}: Vector of length N containing OLS pricing errors.
 - t_alpha::Vector{Float64}: Vector of length N containing t-statistics for OLS pricing errors.
-- beta::Matrix{Float64}: Matrix of size N × k containing factor loadings.
-- cov_epsilon::Matrix{Float64}: Matrix of size N × N containing residual covariance.
-- cov_lambda::Matrix{Float64}: Matrix of size (k+1) × (k+1) containing OLS covariance matrix of risk premia.
-- cov_lambda_gls::Matrix{Float64}: Matrix of size (k+1) × (k+1) containing GLS covariance matrix of risk premia.
+- beta::Matrix{Float64}: Matrix of size N x k containing factor loadings.
+- cov_epsilon::Matrix{Float64}: Matrix of size N x N containing residual covariance.
+- cov_lambda::Matrix{Float64}: Matrix of size (k+1) x (k+1) containing OLS covariance matrix of risk premia.
+- cov_lambda_gls::Matrix{Float64}: Matrix of size (k+1) x (k+1) containing GLS covariance matrix of risk premia.
 - R2_GLS::Float64: Unadjusted GLS R².
-- cov_beta::Matrix{Float64}: Matrix of size (N(k+1)) × (N(k+1)) containing covariance matrix of beta estimates.
+- cov_beta::Matrix{Float64}: Matrix of size (N(k+1)) x (N(k+1)) containing covariance matrix of beta estimates.
 - Metadata fields accessible via dot notation:
  - n_factors::Int: Number of factors (k)
  - n_assets::Int: Number of test assets (N)

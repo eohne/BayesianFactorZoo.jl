@@ -156,14 +156,12 @@ function get_sdf!(temp::MCMCTemps, con::MCMCConstants)
 end
 
 function mcmc_step!(con::MCMCConstants, last_state::MCMCStates, output::MCMCOutputs, i::Int, temp::MCMCTemps, k1::Int=con.k)
-    mtwist = MersenneTwister(i)
+    mtwist = con.rngs
     # Draw new covariance matrix from inverse Wishart
-    # Random.seed!(mtwist, i)
     rand!(mtwist, con.iw_dist, temp.Sigma)
     
     # Calculate standardized quantities
     copyto!(temp.Var_mu_half, cholesky(Hermitian(temp.Sigma/con.t)).U)
-    Random.seed!(mtwist, i)
     copyto!(temp.mu, con.mu_ols + transpose(temp.Var_mu_half) * randn(mtwist, con.p))
     copyto!(temp.sd_Y, sqrt.(diag(temp.Sigma)))
     
@@ -210,7 +208,6 @@ function mcmc_step!(con::MCMCConstants, last_state::MCMCStates, output::MCMCOutp
         temp.L_beta .*= last_state.sigma2
         
         # Generate random component
-        Random.seed!(mtwist, i)
         randn!(mtwist, temp.z)
         
         # Get Cholesky of cov_Lambda (temp.L_beta contains cov_Lambda)
@@ -244,7 +241,6 @@ function mcmc_step!(con::MCMCConstants, last_state::MCMCStates, output::MCMCOutp
 
 
         # Generate random component
-        # Random.seed!(mtwist, i)
         randn!(mtwist, temp.z)
 
         # Get Cholesky of cov_Lambda 
@@ -260,12 +256,10 @@ function mcmc_step!(con::MCMCConstants, last_state::MCMCStates, output::MCMCOutp
     @. temp.prob = min(temp.prob, 1000.0)
     @. temp.prob = temp.prob / (1 + temp.prob)
     
-    # Random.seed!(mtwist, i)
     @. temp.gamma = rand(mtwist, Bernoulli(temp.prob))
     @. last_state.r_gamma = ifelse(temp.gamma == 1, 1.0, con.r)
     output.gamma_path[i, :] = temp.gamma
     
-    # Random.seed!(mtwist, i)
     @. last_state.omega = rand(mtwist, Beta(con.aw + temp.gamma, con.bw + 1 - temp.gamma))
 
     if con.type == "OLS"
@@ -275,7 +269,6 @@ function mcmc_step!(con::MCMCConstants, last_state::MCMCStates, output::MCMCOutp
         mul!(temp.scale3, transpose(temp.Lambda) * temp.D, temp.Lambda)
         @. temp.scale2 += temp.scale3
         @. temp.scale2 /= 2
-        # Random.seed!(mtwist, i)
         last_state.sigma2 = rand(mtwist, InverseGamma(con.dof2, first(temp.scale2)))
     else
         mul!(temp.resid, temp.beta, temp.Lambda)
@@ -285,7 +278,6 @@ function mcmc_step!(con::MCMCConstants, last_state::MCMCStates, output::MCMCOutp
         mul!(temp.scale3, transpose(temp.Lambda) * temp.D, temp.Lambda)  # t(Lambda)%*%D%*%Lambda
         @. temp.scale2 += temp.scale3
         @. temp.scale2 /= 2
-        # Random.seed!(mtwist, i)
         last_state.sigma2 = rand(mtwist, InverseGamma(con.dof2, first(temp.scale2)))
     end
 
@@ -300,7 +292,8 @@ end
     continuous_ss_sdf(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int;
                     psi0::Float64=1.0, r::Float64=0.001,
                     aw::Float64=1.0, bw::Float64=1.0,
-                    type::String="OLS", intercept::Bool=true)
+                    type::String="OLS", intercept::Bool=true,
+                    seed::Union{Nothing,Integer}=nothing)
 
 SDF model selection using continuous spike-and-slab prior.
 
@@ -313,12 +306,13 @@ SDF model selection using continuous spike-and-slab prior.
 - `aw,bw`: Beta prior parameters for factor inclusion probability
 - `type`: "OLS" or "GLS"
 - `intercept`: Include intercept if true
+- `seed`: Random seed for reproducibility. `nothing` (default) uses fresh non-reproducible randomness; an integer gives a reproducible chain
 
 # Returns
 Returns a ContinuousSSSDFOutput struct containing:
-- gamma_path::Matrix{Float64}: Matrix of size sim_length × k containing posterior draws of factor inclusion indicators.
-- lambda_path::Matrix{Float64}: Matrix of size sim_length × (k+1) if intercept=true, or sim_length × k if false. Contains posterior draws of risk prices.
-- sdf_path::Matrix{Float64}: Matrix of size sim_length × t containing posterior draws of the SDF.
+- gamma_path::Matrix{Float64}: Matrix of size sim_length x k containing posterior draws of factor inclusion indicators.
+- lambda_path::Matrix{Float64}: Matrix of size sim_length x (k+1) if intercept=true, or sim_length x k if false. Contains posterior draws of risk prices.
+- sdf_path::Matrix{Float64}: Matrix of size sim_length x t containing posterior draws of the SDF.
 - bma_sdf::Vector{Float64}: Vector of length t containing the Bayesian Model Averaged SDF.
 - Metadata fields accessible via dot notation:
  - n_factors::Int: Number of factors (k)
@@ -335,7 +329,7 @@ Returns a ContinuousSSSDFOutput struct containing:
 - The resulting SDF is normalized to have mean 1
 
 # References
-Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487–557.
+Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487-557.
 
 # Examples
 ```julia
@@ -349,6 +343,9 @@ results_gls = continuous_ss_sdf(f, R, 10_000;
                              aw=1.0,       
                              bw=9.0)       # Prior favoring sparsity
 
+# Reproducible chain
+results_seeded = continuous_ss_sdf(f, R, 10_000; seed=1234)
+
 # Access results
 inclusion_probs = mean(results.gamma_path, dims=1)  # Factor inclusion probabilities
 risk_prices = mean(results.lambda_path, dims=1)     # Posterior mean risk prices
@@ -358,10 +355,11 @@ sdf = results.bma_sdf                              # Model averaged SDF
 function continuous_ss_sdf(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int;
     psi0::Float64=1.0, r::Float64=0.001,
     aw::Float64=1.0, bw::Float64=1.0,
-    type::String="OLS", intercept::Bool=true)
+    type::String="OLS", intercept::Bool=true,
+    seed::Union{Nothing,Integer}=nothing)
     
     # Initialize random number generators
-    mtwist = MersenneTwister(1)
+    mtwist = seed === nothing ? MersenneTwister() : MersenneTwister(seed)
     
     # Get dimensions
     t, k = size(f)
@@ -424,7 +422,6 @@ function continuous_ss_sdf(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::I
     )
     
     # Initialize state
-    Random.seed!(mtwist, 1)
     last_state = MCMCStates(
         ifelse.(rand(mtwist, Bernoulli(0.5), k) .== 1, 1.0, r),
         (transpose(a_ols - beta_ols * Lambda_ols) * (a_ols - beta_ols * Lambda_ols))[1] / N,

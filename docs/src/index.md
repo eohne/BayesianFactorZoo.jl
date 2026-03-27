@@ -17,11 +17,19 @@ For a stand-alone model, the package delivers reliable price of risk estimates f
 
 ## Installation
 
-For now this is not in the general registry (I will register it at some point). In the meantime you can install it directly from my repository.
+The package is registered in the [`General`](https://github.com/JuliaRegistries/General) registry and so can be installed at the REPL with `] add BayesianFactorZoo` or by running:
+```julia 
+    using Pkg 
+    Pkg.add("BayesianFactorZoo")
+```
+
+Alternatively you can install the latest dev version directly from this repository.
+
 ```julia
 using Pkg
-Pkg.add("http://github.com/eohne/BayesianFactorZoo.jl")
+Pkg.add(url="http://github.com/eohne/BayesianFactorZoo.jl")
 ```
+
 
 ## Quick Start
 

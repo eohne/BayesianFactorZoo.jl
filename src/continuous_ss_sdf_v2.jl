@@ -2,7 +2,8 @@
     continuous_ss_sdf_v2(f1::Matrix{Float64}, f2::Matrix{Float64}, R::Matrix{Float64},
                        sim_length::Int; psi0::Float64=1.0, r::Float64=0.001,
                        aw::Float64=1.0, bw::Float64=1.0,
-                       type::String="OLS", intercept::Bool=true)
+                       type::String="OLS", intercept::Bool=true,
+                       seed::Union{Nothing,Integer}=nothing)
 
 SDF model selection with continuous spike-and-slab prior, treating tradable factors as test assets.
 
@@ -12,6 +13,7 @@ SDF model selection with continuous spike-and-slab prior, treating tradable fact
 - `R`: Matrix of test assets with dimension ``t \\times N`` (should NOT contain f2)
 - `sim_length`: Length of MCMCs
 - `psi0,r,aw,bw,type,intercept`: Same as continuous_ss_sdf
+- `seed`: Random seed for reproducibility. `nothing` (default) uses fresh non-reproducible randomness; an integer gives a reproducible chain
 
 # Details
 Same prior structure and posterior distributions as continuous_ss_sdf, but:
@@ -22,9 +24,9 @@ Same prior structure and posterior distributions as continuous_ss_sdf, but:
 
 # Returns
 Returns a ContinuousSSSDFOutput struct containing:
-- `gamma_path::Matrix{Float64}`: Matrix of size sim_length × k containing posterior draws of factor inclusion indicators, where ``k = k_1 + k_2`` (total number of factors).
-- `lambda_path::Matrix{Float64}`: Matrix of size sim_length × (k+1) if intercept=true, or sim_length × k if false. Contains posterior draws of risk prices.
-- `sdf_path::Matrix{Float64}`: Matrix of size sim_length × t containing posterior draws of the SDF.
+- `gamma_path::Matrix{Float64}`: Matrix of size sim_length x k containing posterior draws of factor inclusion indicators, where ``k = k_1 + k_2`` (total number of factors).
+- `lambda_path::Matrix{Float64}`: Matrix of size sim_length x (k+1) if intercept=true, or sim_length x k if false. Contains posterior draws of risk prices.
+- `sdf_path::Matrix{Float64}`: Matrix of size sim_length x t containing posterior draws of the SDF.
 - `bma_sdf::Vector{Float64}`: Vector of length t containing the Bayesian Model Averaged SDF.
 - Metadata fields accessible via dot notation:
  - `n_factors::Int`: Number of factors (``k_1 + k_2``)
@@ -41,7 +43,7 @@ Returns a ContinuousSSSDFOutput struct containing:
 - The spike component r should be close to zero to effectively shrink irrelevant factors
 
 # References
-Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487–557.
+Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487-557.
 
 # Examples
 ```julia
@@ -55,19 +57,31 @@ results_gls = continuous_ss_sdf_v2(f1, f2, R, 10_000;
                                 aw=2.0, 
                                 bw=2.0)
 
+# Reproducible chain
+results_seeded = continuous_ss_sdf_v2(f1, f2, R, 10_000; seed=1234)
+
 # Access results
 inclusion_probs = mean(results.gamma_path, dims=1)  # Factor inclusion probabilities
 risk_prices = mean(results.lambda_path, dims=1)     # Risk price estimates
 avg_sdf = results.bma_sdf                          # Model averaged SDF
 ```
 """
-function continuous_ss_sdf_v2(f1::Matrix{Float64}, f2::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int;
-    psi0::Float64=1.0, r::Float64=0.001,
-    aw::Float64=1.0, bw::Float64=1.0,
-    type::String="OLS", intercept::Bool=true)
+function continuous_ss_sdf_v2(
+    f1::Matrix{Float64},
+    f2::Matrix{Float64},
+    R::Matrix{Float64},
+    sim_length::Int;
+    psi0::Float64=1.0,
+    r::Float64=0.001,
+    aw::Float64=1.0,
+    bw::Float64=1.0,
+    type::String="OLS",
+    intercept::Bool=true,
+    seed::Union{Nothing,Integer}=nothing,
+)
     
     # Initialize random number generators
-    mtwist = MersenneTwister(1)
+    mtwist = seed === nothing ? MersenneTwister() : MersenneTwister(seed)
     
     # Get dimensions
     t = size(f1, 1)
@@ -134,7 +148,6 @@ function continuous_ss_sdf_v2(f1::Matrix{Float64}, f2::Matrix{Float64}, R::Matri
     con = MCMCConstants(f, psi, r, aw, bw, type, intercept, mtwist, t, N, k, p, Y, iw_dist, mu_ols, dof2)
     
     # Initialize State Variables
-    Random.seed!(mtwist, 1)
     last_state = MCMCStates(
         ifelse.(rand(mtwist, Bernoulli(0.5), k) .== 1, 1.0, r),
         (transpose(a_ols - beta_ols * Lambda_ols) * (a_ols - beta_ols * Lambda_ols))[1] / N,

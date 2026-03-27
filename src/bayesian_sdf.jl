@@ -1,7 +1,8 @@
 """
-    BayesianSDF(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int=10000; 
+    BayesianSDF(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int=10000;
                intercept::Bool=true, type::String="OLS", prior::String="Flat",
-               psi0::Float64=5.0, d::Float64=0.5)
+               psi0::Float64=5.0, d::Float64=0.5,
+               seed::Union{Nothing,Integer}=nothing)
 
 Bayesian estimation of Linear SDF (B-SDF).
 
@@ -14,10 +15,11 @@ Bayesian estimation of Linear SDF (B-SDF).
 - `prior`: "Flat" or "Normal", default="Flat"
 - `psi0`: Hyperparameter for normal prior, default=5
 - `d`: Hyperparameter for normal prior, default=0.5
+- `seed`: Random seed for reproducibility. `nothing` (default) uses fresh non-reproducible randomness; an integer gives reproducible results
 
 # Returns
 Returns a BayesianSDFOutput struct containing:
-- `lambda_path::Matrix{Float64}`: Matrix of size sim_length × (k+1) if intercept=true, or sim_length × k if false. Contains posterior draws of risk prices.
+- `lambda_path::Matrix{Float64}`: Matrix of size sim_length x (k+1) if intercept=true, or sim_length x k if false. Contains posterior draws of risk prices.
 - `R2_path::Vector{Float64}`: Vector of length sim_length containing ``R^2`` draws.
 - Metadata fields accessible via dot notation:
  - `n_factors::Int`: Number of factors (k)
@@ -35,28 +37,37 @@ Returns a BayesianSDFOutput struct containing:
 - Risk prices are estimated in the units of the input data (typically monthly returns)
 
 # References
-Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487–557.
+Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487-557.
 
 # Examples
 ```julia
 # Basic usage with default settings
 results = BayesianSDF(f, R)
 
-# Use GLS with normal prior
+# Use GLS with normal prior and reproducible draws
 results_gls = BayesianSDF(f, R, 10_000; 
                         type="GLS", 
                         prior="Normal",
                         psi0=5.0,
-                        d=0.5)
+                        d=0.5,
+                        seed=1234)
 
 # Access results
 risk_prices = mean(results.lambda_path, dims=1)
 r2_values = mean(results.R2_path)
 ```
 """
-function BayesianSDF(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int=10000;
-    intercept::Bool=true, type::String="OLS", prior::String="Flat",
-    psi0::Float64=5.0, d::Float64=0.5)
+function BayesianSDF(
+    f::Matrix{Float64},
+    R::Matrix{Float64},
+    sim_length::Int=10000;
+    intercept::Bool=true,
+    type::String="OLS",
+    prior::String="Flat",
+    psi0::Float64=5.0,
+    d::Float64=0.5,
+    seed::Union{Nothing,Integer}=nothing,
+)
 
 
     t, k = size(f)   # factors: t × k
@@ -96,18 +107,17 @@ function BayesianSDF(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int=100
 
     # Setup inverse Wishart with exact R scale
     iw_dist = InverseWishart(t - 1, t * Sigma_ols)
-    rngs = [MersenneTwister() for i in 1:Threads.nthreads()]
+    base_rng = seed === nothing ? MersenneTwister() : MersenneTwister(seed)
+    iter_seeds = rand(base_rng, UInt64, sim_length)
     # MCMC loop
     Threads.@threads for i in 1:sim_length
-        mtwist = rngs[Threads.threadid()]
-        Random.seed!(mtwist, i)
+        mtwist = MersenneTwister(iter_seeds[i])
         # First stage: time series regression
         Sigma = rand(mtwist,iw_dist)
         # Sigma_R = Sigma[k+1:end, k+1:end]
         
         # Draw means (matching R's approach)
         Var_mu_half = cholesky(Sigma/t).U
-        # Random.seed!(mtwist, i)
         mu = mu_ols + transpose(Var_mu_half) * randn(mtwist,p)
         
         # Calculate quantities for second stage
@@ -134,6 +144,7 @@ function BayesianSDF(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int=100
                 R2 = 1 - ((transpose(a - H * Lambda) * (a - H * Lambda))[1] / ((N-1) * var(vec(a))))
             else # GLS
                 Lambda = transpose(H)*Sigma_inv*H 
+                chol_inv!(Lambda)
                 Lambda = Lambda* (transpose(H)*Sigma_inv*a)
                 # Lambda = inv(cholesky(Hermitian(transpose(H)*Sigma_inv*H))) * (transpose(H)*Sigma_inv*a)
                 a_centered = a .- mean(a)
@@ -151,6 +162,7 @@ function BayesianSDF(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int=100
             else # GLS
                 Lambda = transpose(H)*Sigma_inv*H 
                 Lambda .+= D
+                chol_inv!(Lambda)
                 Lambda = Lambda* (transpose(H)*Sigma_inv*a)
                 # Lambda = inv(cholesky(Hermitian(transpose(H)*Sigma_inv*H + D))) * (transpose(H)*Sigma_inv*a)
                 a_centered = a .- mean(a)

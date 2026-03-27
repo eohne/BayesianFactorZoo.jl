@@ -12,9 +12,9 @@ GMM estimation of factor risk prices under linear SDF framework.
 Returns a SDFGMMOutput struct containing:
 - `lambda_gmm::Vector{Float64}`: Vector of length k+1 containing risk price estimates (includes intercept).
 - `mu_f::Vector{Float64}`: Vector of length k containing estimated factor means.
-- `Avar_hat::Matrix{Float64}`: Matrix of size (2k+1) × (2k+1) containing asymptotic covariance matrix.
+- `Avar_hat::Matrix{Float64}`: Matrix of size (2k+1) x (2k+1) containing asymptotic covariance matrix.
 - `R2_adj::Float64`: Adjusted cross-sectional ``R^2``.
-- `S_hat::Matrix{Float64}`: Matrix of size (N+k) × (N+k) containing estimated spectral density matrix.
+- `S_hat::Matrix{Float64}`: Matrix of size (N+k) x (N+k) containing estimated spectral density matrix.
 - Metadata fields accessible via dot notation:
  - `n_factors::Int`: Number of factors (k)
  - `n_assets::Int`: Number of test assets (N)
@@ -22,14 +22,14 @@ Returns a SDFGMMOutput struct containing:
 
 # Notes
 - Input matrices R and f must have the same number of rows (time periods)
-- The weighting matrix W should match dimensions (N+k) × (N+k)
+- The weighting matrix W should match dimensions (N+k) x (N+k)
 - For tradable factors, weighting matrix should impose self-pricing restrictions
 - Implementation assumes no serial correlation in moment conditions
 - R² is adjusted for degrees of freedom
 - Standard errors are derived under the assumption of correct specification
 
 # References
-Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487–557.
+Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487-557.
 
 Hansen, Lars Peter (1982). "Large Sample Properties of Generalized Method of Moments Estimators." Econometrica, 50(4), 1029-1054.
 
@@ -174,7 +174,7 @@ Note: The returned matrix matches the dimension requirements of SDF_gmm function
 - Block structure is optimal under conditional homoskedasticity
 
 # References
-Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487–557.
+Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487-557.
 
 Hansen, Lars Peter (1982). "Large Sample Properties of Generalized Method of Moments Estimators." Econometrica, 50(4), 1029-1054.
 

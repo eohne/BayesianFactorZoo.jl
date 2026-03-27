@@ -1,7 +1,8 @@
 """
     dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int,
                       lambda0::Vector{Float64}; psi0::Float64=1.0,
-                      max_k::Union{Int,Nothing}=nothing)
+                      max_k::Union{Int,Nothing}=nothing,
+                      seed::Union{Nothing,Integer}=nothing)
 
 Hypothesis testing for risk prices using Dirac spike-and-slab prior.
 
@@ -12,12 +13,13 @@ Hypothesis testing for risk prices using Dirac spike-and-slab prior.
 - `lambda0`: ``k \\times 1`` vector of null hypothesis values
 - `psi0`: Hyperparameter in prior distribution
 - `max_k`: Maximum number of factors in models (optional)
+- `seed`: Random seed for reproducibility. `nothing` (default) uses fresh non-reproducible randomness; an integer gives reproducible results
 
 # Returns
 Returns a DiracSSSDFOutput struct containing:
-- `gamma_path::Matrix{Float64}`: Matrix of size sim_length × k containing posterior draws of factor inclusion indicators.
-- `lambda_path::Matrix{Float64}`: Matrix of size sim_length × (k+1) containing posterior draws of risk prices.
-- `model_probs::Matrix{Float64}`: Matrix of size M × (k+1) where M is the number of possible models. First k columns are model indices (0/1), last column contains model probabilities.
+- `gamma_path::Matrix{Float64}`: Matrix of size sim_length x k containing posterior draws of factor inclusion indicators.
+- `lambda_path::Matrix{Float64}`: Matrix of size sim_length x (k+1) containing posterior draws of risk prices.
+- `model_probs::Matrix{Float64}`: Matrix of size M x (k+1) where M is the number of possible models. First k columns are model indices (0/1), last column contains model probabilities.
 - Metadata fields accessible via dot notation:
  - `n_factors::Int`: Number of factors (k)
  - `n_assets::Int`: Number of test assets (N)
@@ -33,7 +35,7 @@ Returns a DiracSSSDFOutput struct containing:
 - Model probabilities are properly normalized across the considered model space
 
 # References
-Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487–557.
+Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo: We just ran two quadrillion models." Journal of Finance, 78(1), 487-557.
 
 # Examples
 ```julia
@@ -41,9 +43,9 @@ Bryzgalova S, Huang J, Julliard C (2023). "Bayesian solutions for the factor zoo
 lambda0 = zeros(size(f, 2))
 results = dirac_ss_sdf_pvalue(f, R, 10_000, lambda0)
 
-# Test specific values with max 3 factors
+# Test specific values with max 3 factors and reproducible draws
 lambda0_alt = [0.5, 0.3, -0.2, 0.1]
-results_sparse = dirac_ss_sdf_pvalue(f, R, 10_000, lambda0_alt; max_k=3)
+results_sparse = dirac_ss_sdf_pvalue(f, R, 10_000, lambda0_alt; max_k=3, seed=1234)
 
 # Access results
 inclusion_probs = mean(results.gamma_path, dims=1)  # Factor inclusion probabilities
@@ -51,11 +53,18 @@ risk_prices = mean(results.lambda_path, dims=1)     # Posterior mean risk prices
 top_models = results.model_probs[sortperm(results.model_probs[:,end], rev=true)[1:10], :] # Top 10 models
 ```
 """
-function dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length::Int,
-    lambda0::Vector{Float64}; psi0::Float64=1.0,
-    max_k::Union{Int,Nothing}=nothing)
+function dirac_ss_sdf_pvalue(
+    f::Matrix{Float64},
+    R::Matrix{Float64},
+    sim_length::Int,
+    lambda0::Vector{Float64};
+    psi0::Float64=1.0,
+    max_k::Union{Int,Nothing}=nothing,
+    seed::Union{Nothing,Integer}=nothing,
+)
 
-    rngs = [MersenneTwister() for i in 1:Threads.nthreads()]
+    base_rng = seed === nothing ? MersenneTwister() : MersenneTwister(seed)
+    iter_seeds = rand(base_rng, UInt64, sim_length)
     # Get dimensions
     t, k = size(f)
     N = size(R, 2)
@@ -108,11 +117,9 @@ function dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length:
     # MCMC loop
     Threads.@threads for j in 1:sim_length
         # First stage: time series regression
-        mtwist = rngs[Threads.threadid()]
-        Random.seed!(mtwist, j)
+        mtwist = MersenneTwister(iter_seeds[j])
         Sigma = rand(mtwist,InverseWishart(t-1, t * Sigma_ols))
         Var_mu_half = cholesky(Sigma/t).U
-        # Random.seed!(mtwist, j)
         mu = mu_ols + transpose(Var_mu_half) * randn(mtwist,p)
 
         # Calculate standardized quantities
@@ -159,7 +166,6 @@ function dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length:
         # Draw model
         probs = exp.(log_prob)
         probs = probs ./ sum(probs)
-        # Random.seed!(mtwist, j)
         i = rand(mtwist,Categorical(probs))
 
         # Handle drawn model
@@ -187,12 +193,10 @@ function dirac_ss_sdf_pvalue(f::Matrix{Float64}, R::Matrix{Float64}, sim_length:
         # Draw sigma2 and lambda
         HH_D_inv = inv(cholesky(transpose(H_i)*H_i + D_i))
         Lambda_hat = HH_D_inv * (transpose(H_i)*a_gamma)
-        # Random.seed!(mtwist, j)
         sigma2 = rand(mtwist,InverseGamma(N/2, 
                     (transpose(a_gamma - H_i*Lambda_hat)*(a_gamma - H_i*Lambda_hat))[1]/2))
         
         cov_Lambda = sigma2 * HH_D_inv
-        # Random.seed!(mtwist, j)
         Lambda = Lambda_hat + transpose(cholesky(cov_Lambda).U) * randn(mtwist,length(Lambda_hat))
 
         # Store results exactly as R
